@@ -92,41 +92,52 @@ Avoid until needed: Pandas (use raw Python/dict statistics), Celery/Dramatiq (MV
 
 ### 4.1 Observation store schema (MVP)
 
-SQLite, one database per project at `.instinct/instinct.db`. Alembic-managed migrations.
+SQLite, one database per project at `.instinct/instinct.db`, is the **canonical** store for all observations, rankings, and profiles. Alembic-managed migrations.
+
+Per D10, a central Postgres warehouse is reserved as a one-way derived aggregation layer (`instinct sync`, R2+) to enable cross-project queries. `instinct run` **never reads from the warehouse**; the warehouse is populated by explicit push and is always reconstructable from the per-repo SQLite files. To keep the R2 warehouse path cheap, MVP tables include a `repo_fingerprint` column so observations from different repos can be merged into a single Postgres schema using `(repo_fingerprint, local_id)` composite keys without identity collisions.
+
+`repo_fingerprint` is derived at run start: the SHA-256 of the repo's first-commit SHA where available, falling back to a hash of the origin URL, and finally to a machine-local synthetic fingerprint (`hostname + absolute path`) for non-git workspaces. Fingerprint stability across clones of the same repo is the design goal; fallbacks are labelled so the warehouse can reject or de-duplicate as needed.
 
 ```sql
 -- Run-level metadata
 CREATE TABLE runs (
-    id              INTEGER PRIMARY KEY,
-    started_at      TIMESTAMP NOT NULL,
-    completed_at    TIMESTAMP,
-    commit_sha      TEXT,
-    branch          TEXT,
-    config_hash     TEXT NOT NULL,
-    tool_version    TEXT NOT NULL,
-    metric_version  TEXT NOT NULL,
-    status          TEXT NOT NULL,  -- 'running' | 'completed' | 'failed'
-    notes           TEXT
+    id                      INTEGER PRIMARY KEY,
+    repo_fingerprint        TEXT NOT NULL,      -- D10: stable repo identity for
+                                                -- warehouse aggregation
+    repo_fingerprint_source TEXT NOT NULL,      -- 'first_commit' | 'origin_url' | 'synthetic'
+    started_at              TIMESTAMP NOT NULL,
+    completed_at            TIMESTAMP,
+    commit_sha              TEXT,
+    branch                  TEXT,
+    config_hash             TEXT NOT NULL,
+    tool_version            TEXT NOT NULL,
+    metric_version          TEXT NOT NULL,
+    status                  TEXT NOT NULL,      -- 'running' | 'completed' | 'failed'
+    notes                   TEXT
 );
+
+CREATE INDEX idx_runs_fingerprint ON runs (repo_fingerprint);
 
 -- Unique code artifacts, deduplicated by ast_hash
 CREATE TABLE observation_artifacts (
     id                  INTEGER PRIMARY KEY,
+    repo_fingerprint    TEXT NOT NULL,   -- D10: repo identity for warehouse aggregation
     ast_hash            TEXT NOT NULL,
     language            TEXT NOT NULL,
-    artifact_kind       TEXT NOT NULL,  -- 'function' | 'class' | 'module'
-    ast_serialized      BLOB,           -- compressed; may be pruned for old dormant artifacts
+    artifact_kind       TEXT NOT NULL,   -- 'function' | 'class' | 'module'
+    ast_serialized      BLOB,            -- compressed; may be pruned for old dormant artifacts
     metrics_json        TEXT NOT NULL,
     metric_version      TEXT NOT NULL,
     first_seen_run_id   INTEGER NOT NULL REFERENCES runs(id),
     last_seen_run_id    INTEGER NOT NULL REFERENCES runs(id),
     occurrence_count    INTEGER NOT NULL DEFAULT 1,
-    stability_tier      TEXT NOT NULL,  -- 'volatile' | 'settled' | 'dormant'
+    stability_tier      TEXT NOT NULL,   -- 'volatile' | 'settled' | 'dormant'
     UNIQUE (ast_hash, language, metric_version)
 );
 
 CREATE INDEX idx_artifacts_ast_hash ON observation_artifacts (ast_hash);
 CREATE INDEX idx_artifacts_stability ON observation_artifacts (stability_tier);
+CREATE INDEX idx_artifacts_fingerprint ON observation_artifacts (repo_fingerprint);
 
 -- Per-run sightings; this is what the TTL applies to
 CREATE TABLE run_observations (
@@ -360,6 +371,9 @@ scope: personal  # personal | corporate | open-source
 # Optional (defaults shown)
 remote_apis_allowed: false
 include_in_cross_project: false
+sync_allowed: false        # D10: opt-in push to Postgres warehouse via `instinct sync` (R2+).
+                           # Hard-false when `scope: corporate`; any other value is a
+                           # config validation error for corporate repos.
 llm_backend: disabled      # MVP: always disabled; R2+ values: local | ollama | anthropic
 assist_level: observe      # MVP: only 'observe' is valid. R4 values: suggest | patch_assist | apply.
                            # Any other value in MVP raises a config validation error.
@@ -420,6 +434,7 @@ instinct version              # print tool and metric versions
 Reserved for later releases (not implemented in MVP; commands return "not available in this release"):
 
 ```
+instinct sync                 # R2 — one-way push of observations to Postgres warehouse (D10)
 instinct curate               # R3
 instinct suggest              # R4
 instinct apply                # R4
@@ -546,6 +561,8 @@ This section exists so MVP implementation doesn't paint itself into corners. Eac
 - `llm_verdicts` table exists; no writes in MVP.
 - `context_hash` stored in the dedicated `run_observations.context_hash` column (see §4.1). Computed and written on every observation; no MVP consumer.
 - `llm/` module has Protocol definition for `LLMBackend`; no implementations.
+- `repo_fingerprint` populated on every `runs` and `observation_artifacts` row (D10). Enables `instinct sync` in R2 to merge observations across repos into a Postgres warehouse without identity collisions.
+- `sync_allowed` config flag exists; MVP validates it but never consumes it. Hard-false for `scope: corporate`.
 
 **R3 hooks:**
 - Reserved path `.instinct/patterns/` — not created by MVP, but not touched either.

@@ -192,6 +192,29 @@ Three concepts were previously all called "tiers." Rename permanently:
 
 ---
 
+## D10. Storage Model (SQLite canonical, Postgres warehouse reserved)
+
+**MVP storage:** per-project SQLite at `.instinct/instinct.db`. SQLite is the canonical store for all observations and rankings. This is the one and only read path during `instinct run`.
+
+**R2+ aggregation (reserved, not built in MVP):** an optional one-way push to a central Postgres warehouse via `instinct sync`. The warehouse is a derived view, never authoritative, and never read by `instinct run`. This reserves the ability to answer cross-project questions ("is my code getting more complex across all my projects?") without paying for network-dependent infrastructure in the MVP.
+
+**Why hybrid, not Postgres-only:**
+- `instinct run` must work on a developer workstation with no network — Lestrade in a coffee shop, Sherlock when Mycroft is down. Requiring Postgres for basic analysis is a regression against the local-first framing.
+- Corporate isolation is stronger when canonical data is a file in the repo than when it's a row-level discipline in a shared database. Physical separation by default.
+
+**Why not SQLite-only:** cross-project rollups in R2+ would otherwise require either a SQLite-file aggregator (annoying) or a full migration to Postgres (expensive). Committing to Option C now is a cheap design tweak; deferring it later is a rework.
+
+**What MVP must reserve to keep the R2 path cheap:**
+- `repo_fingerprint TEXT NOT NULL` column on every top-level table (`runs`, `observation_artifacts`). Stable hash derived from the repo's first-commit SHA (preferred) or origin URL (fallback), with a local-only synthetic fingerprint for non-git workspaces. This lets the warehouse use `(repo_fingerprint, local_id)` as a composite key without collision.
+- `instinct sync` listed in the reserved-commands block (see architecture spec §7). Not implemented in MVP; its presence is the forward-compat promise.
+- `sync_allowed` config flag (default `false`; hard `false` for `scope: corporate`) — separate from `remote_apis_allowed` because pushing observations to a warehouse is semantically different from calling a remote LLM API, and conflating them would let one flag accidentally unlock the other.
+
+**Guardrail:** `instinct run` never reads from the warehouse. If the warehouse is ever enhanced with derived signals (cross-project pattern hits, warehouse-scale percentiles), those are consumed by reports and curator tools, not by the analysis pipeline. The local SQLite stays authoritative for every number on the front page.
+
+**Rationale:** uses infrastructure that already exists (Postgres on Mycroft, pgvector on Resolve) when the value is there, while preserving offline operation and physical corporate isolation. The design cost is one column on two tables, one reserved command, and one config flag.
+
+---
+
 ## Summary of locked commitments
 
 1. **Name:** Instinct (`savviety-instinct`).
@@ -203,3 +226,4 @@ Three concepts were previously all called "tiers." Rename permanently:
 7. **Retention:** 180 days for observations; artifacts while referenced; no rollups in MVP.
 8. **Scope defaults:** explicit declaration required; corporate is hard-isolated.
 9. **Terminology:** Analysis Stages, Pattern Scopes, Assist Levels.
+10. **Storage:** SQLite canonical, Postgres warehouse reserved as derived one-way view (`instinct sync`, R2+).
