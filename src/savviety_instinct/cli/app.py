@@ -89,3 +89,44 @@ def init_cmd() -> None:
     _ensure_gitignore_entries(cwd / ".gitignore", GITIGNORE_ENTRIES)
     typer.echo(f"Scaffolded {config_path.relative_to(cwd)}")
     typer.echo("Updated .gitignore with Instinct runtime paths.")
+
+
+_RESERVED_COMMAND_MESSAGE_FMT = (
+    "Command '{cmd}' is not available in this release. "
+    "See docs/04-architecture-spec.md §7 for the release roadmap."
+)
+
+
+def _reserved(cmd: str) -> None:
+    typer.echo(_RESERVED_COMMAND_MESSAGE_FMT.format(cmd=cmd))
+    raise typer.Exit(code=2)
+
+
+@app.command("sync")
+def sync_cmd() -> None:
+    """Reserved (R2): push observations to the Postgres warehouse."""
+    _reserved("sync")
+
+
+@app.command("curate")
+def curate_cmd() -> None:
+    """Reserved (R3): pattern curation."""
+    _reserved("curate")
+
+
+@app.command("suggest")
+def suggest_cmd() -> None:
+    """Reserved (R4): suggestion generation."""
+    _reserved("suggest")
+
+
+@app.command("apply")
+def apply_cmd() -> None:
+    """Reserved (R4): apply suggested changes."""
+    _reserved("apply")
+
+
+@app.command("serve")
+def serve_cmd() -> None:
+    """Reserved (R5): MCP server."""
+    _reserved("serve")
