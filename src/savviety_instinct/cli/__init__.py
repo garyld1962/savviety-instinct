@@ -1,1 +1,5 @@
-"""Reserved module — see docs/04-architecture-spec.md §2."""
+"""CLI entry point (Typer)."""
+
+from savviety_instinct.cli.app import app
+
+__all__ = ["app"]
