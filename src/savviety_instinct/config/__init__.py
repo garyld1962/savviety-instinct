@@ -1,1 +1,10 @@
-"""Reserved module — see docs/04-architecture-spec.md §2."""
+"""Config loading, validation, and scaffolding."""
+
+from savviety_instinct.config.models import (
+    AssistLevel,
+    InstinctConfig,
+    LlmBackend,
+    Scope,
+)
+
+__all__ = ["AssistLevel", "InstinctConfig", "LlmBackend", "Scope"]
