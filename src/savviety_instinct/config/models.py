@@ -26,6 +26,12 @@ class Scope(str, Enum):
 
 
 class AssistLevel(str, Enum):
+    """Assist levels. Note: string values use underscore (e.g., ``patch_assist``)
+    to match the Python attribute name. Scope uses a hyphen (``open-source``)
+    because the term itself is hyphenated. The inconsistency is intentional —
+    do not normalise both to the same style.
+    """
+
     OBSERVE = "observe"
     SUGGEST = "suggest"
     PATCH_ASSIST = "patch_assist"
@@ -60,6 +66,12 @@ class InstinctConfig(BaseModel):
 
     @model_validator(mode="after")
     def _enforce_mvp_assist_level(self) -> "InstinctConfig":
+        """Reject any assist_level except OBSERVE (R4 hook).
+
+        Must run before ``_enforce_corporate_guardrails`` so R4 reserved values
+        are gated before we check corporate-specific rules. Pydantic v2 runs
+        @model_validator(mode="after") in definition order — do not reorder.
+        """
         if self.assist_level is not AssistLevel.OBSERVE:
             raise ValueError(
                 f"assist_level must be 'observe' in MVP (got {self.assist_level.value!r}); "
@@ -69,6 +81,12 @@ class InstinctConfig(BaseModel):
 
     @model_validator(mode="after")
     def _enforce_corporate_guardrails(self) -> "InstinctConfig":
+        """Apply D5 / D8 / D10 hard guarantees for ``scope: corporate``.
+
+        Accumulates all violations and raises a single ValueError listing every
+        one, so the caller sees the full picture in a single pass rather than
+        whack-a-mole'ing one field at a time.
+        """
         if self.scope is not Scope.CORPORATE:
             return self
         violations: list[str] = []

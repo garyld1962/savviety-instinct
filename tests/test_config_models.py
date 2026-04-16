@@ -108,8 +108,11 @@ def test_corporate_allows_local_llm_backends():
 def test_corporate_with_all_safe_defaults_is_accepted():
     cfg = InstinctConfig.model_validate({"scope": "corporate"})
     assert cfg.scope == Scope.CORPORATE
+    # All D5/D8/D10 guarded fields default to false; this is the "safe" corporate config.
     assert cfg.sync_allowed is False
     assert cfg.remote_apis_allowed is False
+    assert cfg.include_in_cross_project is False
+    assert cfg.llm_backend.value == "disabled"
 
 
 def test_unknown_keys_rejected():
