@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import datetime
+
+import pytest
 
 from savviety_instinct.core.types import (
     AnalysisContext,
@@ -15,10 +18,12 @@ from savviety_instinct.core.types import (
 )
 from savviety_instinct.storage.interfaces import (
     FileLocation,
+    Observation,
     ObservationQuery,
     ObservationStore,
     Profile,
     Ranking,
+    RankedObservation,
     RepoFingerprintSource,
     Run,
     RunMeta,
@@ -62,6 +67,8 @@ def test_run_meta_is_frozen_dataclass():
         metric_version="0.0.0-slice1",
     )
     assert m.commit_sha == "abc123"
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        m.commit_sha = "deadbeef"  # type: ignore[misc]
 
 
 def test_file_location_fields():
@@ -110,7 +117,7 @@ class _FakeQuery:
     def get_run(self, run_id: int) -> Run:
         raise NotImplementedError
 
-    def get_rankings(self, run_id: int, limit: int) -> list[object]:
+    def get_rankings(self, run_id: int, limit: int) -> list[RankedObservation]:
         return []
 
     def get_profile(self, run_id: int) -> Profile:
@@ -119,7 +126,7 @@ class _FakeQuery:
     def get_trend(self, window_days: int) -> Trend:
         raise NotImplementedError
 
-    def get_artifact_history(self, ast_hash: str) -> list[object]:
+    def get_artifact_history(self, ast_hash: str) -> list[Observation]:
         return []
 
 
@@ -165,3 +172,38 @@ def test_upsert_artifact_returns_id():
     assert aid == 1
     # silence unused-import lint for AnalysisContext
     _ = AnalysisContext()
+
+
+def test_observation_store_rejects_missing_method():
+    class MissingWriteRanking:
+        def begin_run(self, meta: RunMeta) -> int:
+            return 0
+
+        def complete_run(self, run_id: int, status: RunStatus) -> None:
+            _ = (run_id, status)
+
+        def upsert_artifact(self, artifact: Artifact, metrics: list[MetricValue]) -> int:
+            _ = (artifact, metrics)
+            return 0
+
+        def record_observation(
+            self, run_id: int, artifact_id: int, location: FileLocation
+        ) -> None:
+            _ = (run_id, artifact_id, location)
+
+        # intentionally missing: write_ranking, write_profile
+
+    assert not isinstance(MissingWriteRanking(), ObservationStore)
+
+
+def test_observation_query_rejects_missing_method():
+    class MissingGetProfile:
+        def get_run(self, run_id: int) -> Run:
+            raise NotImplementedError
+
+        def get_rankings(self, run_id: int, limit: int) -> list[RankedObservation]:
+            return []
+
+        # intentionally missing: get_profile, get_trend, get_artifact_history
+
+    assert not isinstance(MissingGetProfile(), ObservationQuery)

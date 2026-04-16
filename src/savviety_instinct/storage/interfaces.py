@@ -125,6 +125,11 @@ class Trend:
 
 @runtime_checkable
 class ObservationStore(Protocol):
+    """Write-side repository. `@runtime_checkable` enables isinstance guards at
+    framework entry points; note it checks method presence only, not signatures —
+    rely on mypy for signature validation.
+    """
+
     def begin_run(self, meta: RunMeta) -> RunId: ...
     def complete_run(self, run_id: RunId, status: RunStatus) -> None: ...
     def upsert_artifact(
@@ -139,6 +144,8 @@ class ObservationStore(Protocol):
 
 @runtime_checkable
 class ObservationQuery(Protocol):
+    """Read-side repository. See ObservationStore for the runtime_checkable caveat."""
+
     def get_run(self, run_id: RunId) -> Run: ...
     def get_rankings(self, run_id: RunId, limit: int) -> list[RankedObservation]: ...
     def get_profile(self, run_id: RunId) -> Profile: ...
