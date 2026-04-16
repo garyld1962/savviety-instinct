@@ -16,9 +16,15 @@ Typer's default unknown-command error is sufficient.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import typer
 
 from savviety_instinct import __version__
+from savviety_instinct.config.loader import (
+    ConfigFileError,
+    scaffold_default_config,
+)
 
 app = typer.Typer(
     name="instinct",
@@ -48,3 +54,38 @@ def version_cmd() -> None:
             typer.echo(f"  {metric_id}: {version}")
     else:
         typer.echo("metrics: (none registered)")
+
+
+GITIGNORE_ENTRIES: tuple[str, ...] = (
+    ".instinct/instinct.db",
+    ".instinct/reports/",
+)
+
+
+def _ensure_gitignore_entries(gitignore_path: Path, entries: tuple[str, ...]) -> None:
+    """Append each entry to .gitignore if not already present. Creates file if missing."""
+    existing = gitignore_path.read_text() if gitignore_path.exists() else ""
+    existing_lines = {line.strip() for line in existing.splitlines()}
+    missing = [e for e in entries if e not in existing_lines]
+    if not missing:
+        return
+    # Ensure a trailing newline before appending.
+    if existing and not existing.endswith("\n"):
+        existing += "\n"
+    appended = existing + "\n".join(missing) + "\n"
+    gitignore_path.write_text(appended)
+
+
+@app.command("init")
+def init_cmd() -> None:
+    """Scaffold .instinct/config.yaml and add runtime paths to .gitignore."""
+    cwd = Path.cwd()
+    config_path = cwd / ".instinct" / "config.yaml"
+    try:
+        scaffold_default_config(config_path)
+    except ConfigFileError as e:
+        typer.echo(f"Error: {e}")
+        raise typer.Exit(code=1) from e
+    _ensure_gitignore_entries(cwd / ".gitignore", GITIGNORE_ENTRIES)
+    typer.echo(f"Scaffolded {config_path.relative_to(cwd)}")
+    typer.echo("Updated .gitignore with Instinct runtime paths.")
