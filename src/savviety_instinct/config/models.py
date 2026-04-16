@@ -14,18 +14,18 @@ Decisions enforced:
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
 
-class Scope(str, Enum):
+class Scope(StrEnum):
     PERSONAL = "personal"
     CORPORATE = "corporate"
     OPEN_SOURCE = "open-source"
 
 
-class AssistLevel(str, Enum):
+class AssistLevel(StrEnum):
     """Assist levels. Note: string values use underscore (e.g., ``patch_assist``)
     to match the Python attribute name. Scope uses a hyphen (``open-source``)
     because the term itself is hyphenated. The inconsistency is intentional —
@@ -38,7 +38,7 @@ class AssistLevel(str, Enum):
     APPLY = "apply"
 
 
-class LlmBackend(str, Enum):
+class LlmBackend(StrEnum):
     DISABLED = "disabled"
     LOCAL = "local"
     OLLAMA = "ollama"
@@ -65,7 +65,7 @@ class InstinctConfig(BaseModel):
     assist_level: AssistLevel = AssistLevel.OBSERVE
 
     @model_validator(mode="after")
-    def _enforce_mvp_assist_level(self) -> "InstinctConfig":
+    def _enforce_mvp_assist_level(self) -> InstinctConfig:
         """Reject any assist_level except OBSERVE (R4 hook).
 
         Must run before ``_enforce_corporate_guardrails`` so R4 reserved values
@@ -80,7 +80,7 @@ class InstinctConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _enforce_corporate_guardrails(self) -> "InstinctConfig":
+    def _enforce_corporate_guardrails(self) -> InstinctConfig:
         """Apply D5 / D8 / D10 hard guarantees for ``scope: corporate``.
 
         Accumulates all violations and raises a single ValueError listing every

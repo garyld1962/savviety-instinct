@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Protocol, runtime_checkable
 
 from savviety_instinct.core.types import Artifact, MetricValue
@@ -19,13 +19,13 @@ RunId = int
 ArtifactId = int
 
 
-class RunStatus(str, Enum):
+class RunStatus(StrEnum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
 
 
-class RepoFingerprintSource(str, Enum):
+class RepoFingerprintSource(StrEnum):
     """Three derivation tiers per D10. Populated on `runs.repo_fingerprint_source`."""
 
     FIRST_COMMIT = "first_commit"
@@ -33,7 +33,7 @@ class RepoFingerprintSource(str, Enum):
     SYNTHETIC = "synthetic"
 
 
-class ProfileStatus(str, Enum):
+class ProfileStatus(StrEnum):
     NORMAL = "normal"
     WATCH = "watch"
     ELEVATED = "elevated"
@@ -132,9 +132,7 @@ class ObservationStore(Protocol):
 
     def begin_run(self, meta: RunMeta) -> RunId: ...
     def complete_run(self, run_id: RunId, status: RunStatus) -> None: ...
-    def upsert_artifact(
-        self, artifact: Artifact, metrics: list[MetricValue]
-    ) -> ArtifactId: ...
+    def upsert_artifact(self, artifact: Artifact, metrics: list[MetricValue]) -> ArtifactId: ...
     def record_observation(
         self, run_id: RunId, artifact_id: ArtifactId, location: FileLocation
     ) -> None: ...

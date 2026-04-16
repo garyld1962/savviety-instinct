@@ -69,12 +69,8 @@ def upgrade() -> None:
         sa.UniqueConstraint("ast_hash", "language", "metric_version"),
     )
     op.create_index("idx_artifacts_ast_hash", "observation_artifacts", ["ast_hash"])
-    op.create_index(
-        "idx_artifacts_stability", "observation_artifacts", ["stability_tier"]
-    )
-    op.create_index(
-        "idx_artifacts_fingerprint", "observation_artifacts", ["repo_fingerprint"]
-    )
+    op.create_index("idx_artifacts_stability", "observation_artifacts", ["stability_tier"])
+    op.create_index("idx_artifacts_fingerprint", "observation_artifacts", ["repo_fingerprint"])
 
     op.create_table(
         "run_observations",
@@ -169,9 +165,7 @@ def upgrade() -> None:
         sa.Column("scope", sa.Text, nullable=False),
         sa.Column("file_path", sa.Text, nullable=False),
         sa.Column("structural_sig", sa.Text, nullable=True),
-        sa.Column(
-            "lifecycle_state", sa.Text, nullable=False, server_default="proposed"
-        ),
+        sa.Column("lifecycle_state", sa.Text, nullable=False, server_default="proposed"),
         sa.Column("created_at", sa.DateTime, nullable=False),
         sa.Column("updated_at", sa.DateTime, nullable=False),
     )
@@ -179,25 +173,19 @@ def upgrade() -> None:
     op.create_table(
         "pattern_evidence",
         sa.Column("id", sa.Integer, primary_key=True),
-        sa.Column(
-            "pattern_id", sa.Integer, sa.ForeignKey("patterns.id"), nullable=False
-        ),
+        sa.Column("pattern_id", sa.Integer, sa.ForeignKey("patterns.id"), nullable=False),
         sa.Column(
             "artifact_id",
             sa.Integer,
             sa.ForeignKey("observation_artifacts.id"),
             nullable=False,
         ),
-        sa.Column(
-            "run_id", sa.Integer, sa.ForeignKey("runs.id"), nullable=True
-        ),
+        sa.Column("run_id", sa.Integer, sa.ForeignKey("runs.id"), nullable=True),
         sa.Column("relation", sa.Text, nullable=False),
         sa.Column("created_at", sa.DateTime, nullable=False),
     )
     op.create_index("idx_pattern_evidence_pattern", "pattern_evidence", ["pattern_id"])
-    op.create_index(
-        "idx_pattern_evidence_artifact", "pattern_evidence", ["artifact_id"]
-    )
+    op.create_index("idx_pattern_evidence_artifact", "pattern_evidence", ["artifact_id"])
 
 
 def downgrade() -> None:

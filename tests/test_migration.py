@@ -105,9 +105,7 @@ def test_expected_indexes_exist(migrated_db: str):
 def test_forward_compat_tables_have_key_columns(migrated_db: str):
     """R2/R3 reserved tables must ship with the right shape (even though empty)."""
     llm_cols = _columns(migrated_db, "llm_verdicts")
-    assert {"artifact_id", "context_hash", "model_id", "prompt_hash", "stage"}.issubset(
-        llm_cols
-    )
+    assert {"artifact_id", "context_hash", "model_id", "prompt_hash", "stage"}.issubset(llm_cols)
     patterns_cols = _columns(migrated_db, "patterns")
     assert {"pattern_id", "scope", "file_path", "lifecycle_state"}.issubset(patterns_cols)
     evidence_cols = _columns(migrated_db, "pattern_evidence")

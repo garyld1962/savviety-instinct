@@ -1,0 +1,24 @@
+# Pre-commit hooks — arch §3.2.
+# Ruff for lint + format; mypy for core/ and storage/ (strict per pyproject.toml).
+#
+# mypy runs as a `local` hook via `uv run mypy` so it sees the project's own
+# packages (otherwise pre-commit's isolated mypy env cannot resolve
+# `savviety_instinct.core.types` imports from `storage/interfaces.py`).
+# Ruff revs should match what `uv sync` installs — bump as needed.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.11
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (core + storage, strict)
+        entry: uv run mypy
+        language: system
+        types: [python]
+        files: ^src/savviety_instinct/(core|storage)/
+        pass_filenames: true

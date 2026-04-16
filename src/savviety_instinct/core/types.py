@@ -7,30 +7,30 @@ Must not import from any other internal module.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Protocol, runtime_checkable
 
 
-class Language(str, Enum):
+class Language(StrEnum):
     PYTHON = "python"
     RUST = "rust"
     CSHARP = "csharp"
     TYPESCRIPT = "typescript"
 
 
-class ArtifactKind(str, Enum):
+class ArtifactKind(StrEnum):
     FUNCTION = "function"
     CLASS = "class"
     MODULE = "module"
 
 
-class Confidence(str, Enum):
+class Confidence(StrEnum):
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
 
 
-class InputKind(str, Enum):
+class InputKind(StrEnum):
     AST = "ast"
     CALL_GRAPH = "call_graph"
     MODULE_GRAPH = "module_graph"

@@ -64,44 +64,34 @@ def test_assist_level_non_observe_rejected_in_mvp():
 def test_corporate_forces_sync_allowed_false():
     # D10: scope=corporate must hard-false sync_allowed.
     with pytest.raises(ValidationError) as exc:
-        InstinctConfig.model_validate(
-            {"scope": "corporate", "sync_allowed": True}
-        )
+        InstinctConfig.model_validate({"scope": "corporate", "sync_allowed": True})
     assert "corporate" in str(exc.value).lower()
 
 
 def test_corporate_forces_remote_apis_false():
     # D5/D8: corporate must hard-false remote_apis_allowed.
     with pytest.raises(ValidationError) as exc:
-        InstinctConfig.model_validate(
-            {"scope": "corporate", "remote_apis_allowed": True}
-        )
+        InstinctConfig.model_validate({"scope": "corporate", "remote_apis_allowed": True})
     assert "corporate" in str(exc.value).lower()
 
 
 def test_corporate_forces_include_in_cross_project_false():
     with pytest.raises(ValidationError) as exc:
-        InstinctConfig.model_validate(
-            {"scope": "corporate", "include_in_cross_project": True}
-        )
+        InstinctConfig.model_validate({"scope": "corporate", "include_in_cross_project": True})
     assert "corporate" in str(exc.value).lower()
 
 
 def test_corporate_rejects_anthropic_llm_backend():
     # D5 hard guarantee: corporate code must not call out to remote APIs.
     with pytest.raises(ValidationError) as exc:
-        InstinctConfig.model_validate(
-            {"scope": "corporate", "llm_backend": "anthropic"}
-        )
+        InstinctConfig.model_validate({"scope": "corporate", "llm_backend": "anthropic"})
     assert "corporate" in str(exc.value).lower()
     assert "anthropic" in str(exc.value).lower()
 
 
 def test_corporate_allows_local_llm_backends():
     for backend in ("disabled", "local", "ollama"):
-        cfg = InstinctConfig.model_validate(
-            {"scope": "corporate", "llm_backend": backend}
-        )
+        cfg = InstinctConfig.model_validate({"scope": "corporate", "llm_backend": backend})
         assert cfg.llm_backend.value == backend
 
 
@@ -118,6 +108,4 @@ def test_corporate_with_all_safe_defaults_is_accepted():
 def test_unknown_keys_rejected():
     # arch §16.5: unknown keys are errors by default (strict).
     with pytest.raises(ValidationError):
-        InstinctConfig.model_validate(
-            {"scope": "personal", "not_a_real_key": "boom"}
-        )
+        InstinctConfig.model_validate({"scope": "personal", "not_a_real_key": "boom"})

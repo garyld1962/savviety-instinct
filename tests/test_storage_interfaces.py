@@ -22,8 +22,8 @@ from savviety_instinct.storage.interfaces import (
     ObservationQuery,
     ObservationStore,
     Profile,
-    Ranking,
     RankedObservation,
+    Ranking,
     RepoFingerprintSource,
     Run,
     RunMeta,
@@ -101,9 +101,7 @@ class _FakeStore:
         _ = (artifact, metrics)
         return 1
 
-    def record_observation(
-        self, run_id: int, artifact_id: int, location: FileLocation
-    ) -> None:
+    def record_observation(self, run_id: int, artifact_id: int, location: FileLocation) -> None:
         _ = (run_id, artifact_id, location)
 
     def write_ranking(self, run_id: int, ranking: Ranking) -> None:
@@ -186,9 +184,7 @@ def test_observation_store_rejects_missing_method():
             _ = (artifact, metrics)
             return 0
 
-        def record_observation(
-            self, run_id: int, artifact_id: int, location: FileLocation
-        ) -> None:
+        def record_observation(self, run_id: int, artifact_id: int, location: FileLocation) -> None:
             _ = (run_id, artifact_id, location)
 
         # intentionally missing: write_ranking, write_profile
