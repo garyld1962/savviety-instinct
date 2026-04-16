@@ -1,1 +1,41 @@
-"""Reserved module — see docs/04-architecture-spec.md §2."""
+"""Storage layer — repository pattern Protocols and (Slice 2+) SQLAlchemy impl."""
+
+from savviety_instinct.storage.interfaces import (
+    ArtifactId,
+    FileLocation,
+    Observation,
+    ObservationQuery,
+    ObservationStore,
+    Profile,
+    ProfileAxis,
+    ProfileStatus,
+    Ranking,
+    RankedObservation,
+    RepoFingerprintSource,
+    Run,
+    RunId,
+    RunMeta,
+    RunStatus,
+    Trend,
+    TrendPoint,
+)
+
+__all__ = [
+    "ArtifactId",
+    "FileLocation",
+    "Observation",
+    "ObservationQuery",
+    "ObservationStore",
+    "Profile",
+    "ProfileAxis",
+    "ProfileStatus",
+    "Ranking",
+    "RankedObservation",
+    "RepoFingerprintSource",
+    "Run",
+    "RunId",
+    "RunMeta",
+    "RunStatus",
+    "Trend",
+    "TrendPoint",
+]
