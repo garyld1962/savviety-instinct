@@ -30,3 +30,6 @@ htmlcov/
 
 # Existing
 CLAUDE.local.md
+
+# Claude Code per-machine state (persists across sessions, not shared)
+.claude/SESSION.md
