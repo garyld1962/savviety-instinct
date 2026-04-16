@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 from savviety_instinct.core.types import (
@@ -41,7 +43,7 @@ def test_input_kind_enum_has_core_values():
 
 def test_source_range_is_frozen():
     r = SourceRange(file_path="x.py", line_start=1, line_end=10)
-    with pytest.raises(Exception):
+    with pytest.raises(dataclasses.FrozenInstanceError):
         r.file_path = "y.py"  # type: ignore[misc]
 
 
@@ -55,7 +57,7 @@ def test_artifact_is_frozen_and_carries_identity():
         source_range=SourceRange(file_path="x.py", line_start=1, line_end=3),
     )
     assert a.ast_hash == "abc"
-    with pytest.raises(Exception):
+    with pytest.raises(dataclasses.FrozenInstanceError):
         a.ast_hash = "def"  # type: ignore[misc]
 
 
@@ -79,12 +81,12 @@ def test_analysis_context_is_constructible_with_defaults():
     assert AnalysisContext() == AnalysisContext()
 
 
-def test_metric_protocol_runtime_checkable():
+def test_metric_protocol_accepts_complete_implementation():
     class Dummy:
         id = "dummy"
         version = "0.0.0"
-        applies_to: set[ArtifactKind] = {ArtifactKind.FUNCTION}
-        required_inputs: set[InputKind] = {InputKind.AST}
+        applies_to: frozenset[ArtifactKind] = frozenset({ArtifactKind.FUNCTION})
+        required_inputs: frozenset[InputKind] = frozenset({InputKind.AST})
 
         def compute(self, artifact: Artifact, context: AnalysisContext) -> MetricValue:
             return MetricValue(
@@ -95,3 +97,14 @@ def test_metric_protocol_runtime_checkable():
             )
 
     assert isinstance(Dummy(), Metric)
+
+
+def test_metric_protocol_rejects_missing_compute():
+    class Incomplete:
+        id = "incomplete"
+        version = "0.0.0"
+        applies_to: frozenset[ArtifactKind] = frozenset()
+        required_inputs: frozenset[InputKind] = frozenset()
+
+    # runtime_checkable verifies method presence; Incomplete is missing compute().
+    assert not isinstance(Incomplete(), Metric)

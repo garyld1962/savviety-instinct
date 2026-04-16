@@ -59,6 +59,8 @@ class Artifact:
 @dataclass(frozen=True, slots=True)
 class MetricValue:
     metric_id: str
+    # Numeric for counts and ratios; str for categorical metrics like
+    # stability_tier ("volatile" | "settled" | "dormant"). Do not narrow.
     value: float | int | str
     metric_version: str
     confidence: Confidence
@@ -79,7 +81,7 @@ class AnalysisContext:
 class Metric(Protocol):
     id: str
     version: str
-    applies_to: set[ArtifactKind]
-    required_inputs: set[InputKind]
+    applies_to: frozenset[ArtifactKind]
+    required_inputs: frozenset[InputKind]
 
     def compute(self, artifact: Artifact, context: AnalysisContext) -> MetricValue: ...
