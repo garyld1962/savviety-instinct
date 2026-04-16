@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# uv
+.venv/
+
+# Test / type / lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Instinct runtime
+.instinct/instinct.db
+.instinct/*.db-wal
+.instinct/*.db-shm
+.instinct/*.db-journal
+.instinct/reports/
+
+# Editor (light, non-exhaustive)
+.vscode/
+.idea/
+
+# Existing
+CLAUDE.local.md
