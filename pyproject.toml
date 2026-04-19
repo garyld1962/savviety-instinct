@@ -50,6 +50,7 @@ default-groups = ["dev", "test"]
 line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
+exclude = ["tests/fixtures/"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "N", "SIM"]
