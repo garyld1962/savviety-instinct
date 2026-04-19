@@ -1,0 +1,30 @@
+# Cognitive complexity increment rules for Python.
+# Schema documented in analyze/rules.py :: CognitiveRules.
+#
+# Per arch §1.2 / Sonar semantics:
+#  - `+1` for each linear-flow break
+#  - additional `+nesting_depth` when nested inside another control structure
+#  - `+0` for shorthand (early return, null-coalescing, single-branch ?.)
+#
+# Python-specific: list/set/dict comprehensions count ONCE per generator clause,
+# not per operation (arch §1.2 pitfall). Slice 3 approximation: +1 per
+# comprehension (regardless of clause count). Finer-grained counting is a
+# future metric_version bump.
+#
+# 'increments_nesting' controls whether crossing this construct deepens the
+# nesting counter used by its descendants. e.g. `if`-inside-`if`: outer's
+# increments_nesting=true, so the inner gets +2 (1 for being an if + 1 for
+# depth).
+
+language: python
+increments:
+  if: {base: 1, increments_nesting: true}
+  elif: {base: 1, increments_nesting: false}   # elif is a continuation, not a new nest
+  else: {base: 1, increments_nesting: false}   # else is the fallthrough branch
+  for: {base: 1, increments_nesting: true}
+  while: {base: 1, increments_nesting: true}
+  try: {base: 0, increments_nesting: true}     # try wrapper is zero-cost but nests its except clauses
+  except: {base: 1, increments_nesting: false}
+  ternary: {base: 1, increments_nesting: false}
+  boolean_sequence: {base: 1, increments_nesting: false}
+  comprehension: {base: 1, increments_nesting: false}
