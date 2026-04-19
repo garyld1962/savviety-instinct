@@ -394,6 +394,34 @@ def _count_statements(body_node: Node) -> int:
     return count
 
 
+def _collect_identifiers(body_node: Node, source: bytes) -> tuple[str, ...]:
+    """Collect all identifier occurrences from a function body.
+
+    Walks the subtree rooted at `body_node`, emitting the text of every
+    `identifier` tree-sitter node. Includes duplicates (order-preserved);
+    callers dedupe via `set()` if distinct-count is wanted.
+
+    Skips descents into nested function_definition / class_definition /
+    lambda nodes — their identifiers belong to those nested scopes, not
+    the enclosing function.
+    """
+    out: list[str] = []
+    stack: list[Node] = list(body_node.children)
+    while stack:
+        node = stack.pop()
+        if node.type == "identifier":
+            out.append(_text(node, source))
+            continue  # identifier is a leaf; no children to recurse
+        if node.type in ("function_definition", "class_definition", "lambda"):
+            # Nested scope — skip (Slice 4a Known Gap #1: lambdas attributed
+            # to enclosing function for max_nesting/npath; for identifiers
+            # we DO exclude them to avoid polluting the enclosing function's
+            # identifier count).
+            continue
+        stack.extend(node.children)
+    return tuple(out)
+
+
 def _collect_syntax_errors(tree: Tree, source: bytes, file_path: str) -> list[ParseError]:
     errors: list[ParseError] = []
     stack: list[Node] = [tree.root_node]
@@ -430,6 +458,9 @@ def _collect_functions(
                 _collect_control_flow(body_node, file_path) if body_node is not None else ()
             )
             statement_count = _count_statements(body_node) if body_node is not None else 0
+            identifier_names = (
+                _collect_identifiers(body_node, source) if body_node is not None else ()
+            )
             out.append(
                 (
                     FunctionDefNode(
@@ -441,6 +472,7 @@ def _collect_functions(
                         parameter_names=params,
                         control_flow=control_flow,
                         statement_count=statement_count,
+                        identifier_names=identifier_names,
                     ),
                     node,
                 )
