@@ -26,6 +26,7 @@ from savviety_instinct.parse.types import (
     ClassDefNode,
     ControlFlowNode,
     ControlFlowNodeKind,
+    DelegationKind,  # Slice 4b
     FunctionDefNode,
     ParseError,
     ParseErrorKind,
@@ -427,6 +428,173 @@ def _collect_identifiers(body_node: Node, source: bytes) -> tuple[str, ...]:
     return tuple(out)
 
 
+def _classify_delegation(
+    body_node: Node, source: bytes, parameter_names: tuple[str, ...]
+) -> DelegationKind:
+    """Classify a function body's triviality for trivial_delegation_ratio (Slice 4b).
+
+    Rules (R1 — deliberately strict, false-positive-averse):
+    - RETURN_PASSTHROUGH: exactly one non-docstring statement, which is
+      `return f(args)` satisfying the passthrough argument rules.
+    - ASSIGN_DELEGATE: exactly two non-docstring statements, `x = f(args)`
+      followed by `return x`. Call must satisfy passthrough rules.
+    - WRAPPER_NO_TRANSFORM: exactly one non-docstring statement, which is a
+      bare call expression (not a return, not an assign) satisfying passthrough.
+    - NONE: everything else.
+
+    KNOWN GAPS (metric_version=1.0.0):
+    - `super().foo(...)` not detected (attribute-call breaks identifier-only rule).
+    - async def / await wrappers not detected (return value is `await`, not call).
+    - `self.x = x` not detected (attribute assignment, not a delegated call).
+    - Default-argument injection (`def g(a, b=5): return f(a, b)`) IS counted
+      as passthrough — signature defaults considered separate from body rules.
+    """
+    # Collect non-docstring statements from the direct body.
+    stmts = [c for c in body_node.children if c.type in _STATEMENT_NODE_TYPES]
+    stmts = [s for s in stmts if not _is_docstring_node(s)]
+
+    if len(stmts) == 1:
+        stmt = stmts[0]
+        if stmt.type == "return_statement":
+            call = _return_value_call(stmt)
+            if call is not None and _call_is_passthrough(call, source, parameter_names):
+                return DelegationKind.RETURN_PASSTHROUGH
+        elif stmt.type == "expression_statement":
+            call = _bare_call_expression(stmt)
+            if call is not None and _call_is_passthrough(call, source, parameter_names):
+                return DelegationKind.WRAPPER_NO_TRANSFORM
+        return DelegationKind.NONE
+
+    if len(stmts) == 2:
+        first, second = stmts
+        target_text = _assign_target_text(first, source)
+        call = _simple_assign_call_rhs(first) if target_text is not None else None
+        if (
+            target_text is not None
+            and call is not None
+            and _call_is_passthrough(call, source, parameter_names)
+            and _is_return_of_identifier(second, source, target_text)
+        ):
+            return DelegationKind.ASSIGN_DELEGATE
+
+    return DelegationKind.NONE
+
+
+def _return_value_call(return_stmt: Node) -> Node | None:
+    """For `return <expr>`, return the expr iff it is a `call` node."""
+    for child in return_stmt.children:
+        if child.is_named and child.type == "call":
+            return child
+        if child.is_named and child.type != "return":
+            # Something other than a call — reject (e.g., binary_operator,
+            # identifier, integer literal). Conservative: only direct calls.
+            return None
+    return None
+
+
+def _bare_call_expression(expr_stmt: Node) -> Node | None:
+    """For a bare expression_statement, return the inner call node or None."""
+    named = [c for c in expr_stmt.children if c.is_named]
+    if len(named) == 1 and named[0].type == "call":
+        return named[0]
+    return None
+
+
+def _assign_target_text(stmt: Node, source: bytes) -> str | None:
+    """If `stmt` is `x = <rhs>` where x is a plain identifier, return x's text.
+
+    Rejects tuple-unpacking, augmented-assign, typed-assign-with-complex-LHS,
+    and attribute-assign (`self.x = ...`). Tree-sitter-python emits `+=` / `-=`
+    etc. as a separate `augmented_assignment` node type, so the `"assignment"`
+    check already excludes those.
+    """
+    if stmt.type != "expression_statement":
+        return None
+    named = [c for c in stmt.children if c.is_named]
+    if len(named) != 1 or named[0].type != "assignment":
+        return None
+    left = named[0].child_by_field_name("left")
+    if left is None or left.type != "identifier":
+        return None
+    return _text(left, source)
+
+
+def _simple_assign_call_rhs(stmt: Node) -> Node | None:
+    if stmt.type != "expression_statement":
+        return None
+    named = [c for c in stmt.children if c.is_named]
+    if len(named) != 1 or named[0].type != "assignment":
+        return None
+    right = named[0].child_by_field_name("right")
+    if right is None or right.type != "call":
+        return None
+    return right
+
+
+def _is_return_of_identifier(stmt: Node, source: bytes, identifier_text: str) -> bool:
+    """True iff `stmt` is `return <identifier_text>` — text must match exactly."""
+    if stmt.type != "return_statement":
+        return False
+    named = [c for c in stmt.children if c.is_named and c.type != "return"]
+    if len(named) != 1 or named[0].type != "identifier":
+        return False
+    return _text(named[0], source) == identifier_text
+
+
+def _call_is_passthrough(call_node: Node, source: bytes, parameter_names: tuple[str, ...]) -> bool:
+    """Verify call args pass through exactly.
+
+    Rules:
+    - callee (function field) must be an identifier — not attribute, not subscript
+      (KNOWN GAP: super().foo() not supported).
+    - positional args must be identifier nodes whose texts equal a prefix of
+      parameter_names in order.
+    - keyword args must be `name=value` where name-text equals value-text and
+      value is an identifier node.
+    - no *args / **kwargs splats (splat patterns reject).
+    """
+    func = call_node.child_by_field_name("function")
+    if func is None or func.type != "identifier":
+        return False
+    args = call_node.child_by_field_name("arguments")
+    if args is None:
+        # Call with zero parens? Treat as no args, trivially passthrough only if
+        # parameter_names is also empty.
+        return len(parameter_names) == 0
+
+    positional: list[str] = []
+    keyword_names: list[tuple[str, str]] = []
+    for child in args.children:
+        if not child.is_named:
+            continue  # commas, parens
+        if child.type == "identifier":
+            positional.append(_text(child, source))
+        elif child.type == "keyword_argument":
+            name_node = child.child_by_field_name("name")
+            value_node = child.child_by_field_name("value")
+            if name_node is None or value_node is None:
+                return False
+            if value_node.type != "identifier":
+                return False
+            keyword_names.append((_text(name_node, source), _text(value_node, source)))
+        elif child.type in ("list_splat", "dictionary_splat", "parenthesized_splat_pattern"):
+            return False  # splats reject
+        else:
+            # Any other node (integer, string, binary_operator, attribute, call, ...)
+            # breaks passthrough — transformation or literal injection.
+            return False
+
+    # Positional args must be prefix of parameter_names in order.
+    if len(positional) > len(parameter_names):
+        return False
+    for i, arg_name in enumerate(positional):
+        if arg_name != parameter_names[i]:
+            return False
+
+    # Keyword args must be name==value (same identifier text).
+    return all(kname == kvalue for kname, kvalue in keyword_names)
+
+
 def _collect_syntax_errors(tree: Tree, source: bytes, file_path: str) -> list[ParseError]:
     errors: list[ParseError] = []
     stack: list[Node] = [tree.root_node]
@@ -466,6 +634,11 @@ def _collect_functions(
             identifier_names = (
                 _collect_identifiers(body_node, source) if body_node is not None else ()
             )
+            delegation_kind = (
+                _classify_delegation(body_node, source, params)
+                if body_node is not None
+                else DelegationKind.NONE
+            )
             out.append(
                 (
                     FunctionDefNode(
@@ -478,6 +651,7 @@ def _collect_functions(
                         control_flow=control_flow,
                         statement_count=statement_count,
                         identifier_names=identifier_names,
+                        delegation_kind=delegation_kind,  # Slice 4b
                     ),
                     node,
                 )
