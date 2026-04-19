@@ -91,6 +91,67 @@ def init_cmd() -> None:
     typer.echo("Updated .gitignore with Instinct runtime paths.")
 
 
+@app.command("run")
+def run_cmd(
+    path: Path = typer.Argument(  # noqa: B008
+        ...,
+        help="File or directory to analyze. Must be a .py file or a dir with .py files.",
+    ),
+) -> None:
+    """Analyze Python code at PATH and print metrics to stdout.
+
+    Slice 3: prints tab-separated rows (path:lines, qualified_name, metric=value, confidence).
+    Full report layer arrives in Slice 6.
+    """
+    from savviety_instinct.analyze import run_pipeline
+    from savviety_instinct.config.loader import ConfigFileError, load_config
+
+    config_path = Path.cwd() / ".instinct" / "config.yaml"
+    try:
+        config = load_config(config_path)
+    except ConfigFileError as e:
+        typer.echo(f"Config error: {e}", err=True)
+        raise typer.Exit(code=1) from e
+
+    if not path.exists():
+        typer.echo(f"Path not found: {path}", err=True)
+        raise typer.Exit(code=2)
+
+    results, summary = run_pipeline(path, config)
+    rows = list(results)
+
+    # Deterministic sort.
+    rows.sort(
+        key=lambda r: (
+            r[0].source_range.file_path,
+            r[0].source_range.line_start,
+            r[0].name,
+            r[1].metric_id,
+        )
+    )
+
+    for artifact, metric_value in rows:
+        sr = artifact.source_range
+        qualified = (
+            artifact.name
+            if artifact.enclosing_scope is None
+            else f"{artifact.enclosing_scope}.{artifact.name}"
+        )
+        typer.echo(
+            f"{sr.file_path}:{sr.line_start}-{sr.line_end}\t"
+            f"{qualified}\t"
+            f"{metric_value.metric_id}={metric_value.value}\t"
+            f"{metric_value.confidence.value}"
+        )
+
+    typer.echo(
+        f"[summary] {summary.files_parsed} files parsed, "
+        f"{summary.files_skipped} files skipped, "
+        f"{summary.functions_analyzed} functions analyzed",
+        err=True,
+    )
+
+
 _RESERVED_COMMAND_MESSAGE_FMT = (
     "Command '{cmd}' is not available in this release. "
     "See docs/04-architecture-spec.md §7 for the release roadmap."
