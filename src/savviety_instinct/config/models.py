@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Scope(StrEnum):
@@ -63,6 +63,21 @@ class InstinctConfig(BaseModel):
     # R2+ / R4 reserved, validated in MVP
     llm_backend: LlmBackend = LlmBackend.DISABLED
     assist_level: AssistLevel = AssistLevel.OBSERVE
+
+    suppress: list[str] = Field(
+        default_factory=lambda: [
+            "**/tests/**",
+            "**/test_*.py",
+            "**/*_test.py",
+            "**/migrations/**",
+            "**/__pycache__/**",
+            "**/.venv/**",
+            "**/build/**",
+            "**/dist/**",
+            "**/conftest.py",
+        ],
+        description="Glob patterns of files/directories to exclude from analysis.",
+    )
 
     @model_validator(mode="after")
     def _enforce_mvp_assist_level(self) -> InstinctConfig:
