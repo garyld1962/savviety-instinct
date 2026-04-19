@@ -9,6 +9,7 @@ from savviety_instinct.analyze.metrics import (
     MAX_NESTING_DEPTH_METRIC,
     NPATH_METRIC,
     STATEMENT_COUNT_METRIC,
+    TRIVIAL_DELEGATION_RATIO_METRIC,
 )
 from savviety_instinct.analyze.pipeline import PipelineSummary, run_pipeline
 from savviety_instinct.analyze.rules import CognitiveRules, load_cognitive_rules
@@ -17,12 +18,15 @@ from savviety_instinct.analyze.rules import CognitiveRules, load_cognitive_rules
 # Control-flow family first (statement_count sets up size-family too), then
 # identifier_quality as a comprehensibility signal.
 METRICS_REGISTRY = (
+    # Function-level (Slice 3 + 4a)
     STATEMENT_COUNT_METRIC,
     CYCLOMATIC_METRIC,
     COGNITIVE_METRIC,
     MAX_NESTING_DEPTH_METRIC,
     NPATH_METRIC,
     IDENTIFIER_QUALITY_METRIC,
+    # Module-level (Slice 4b)
+    TRIVIAL_DELEGATION_RATIO_METRIC,
 )
 
 __all__ = [
@@ -35,6 +39,7 @@ __all__ = [
     "NPATH_METRIC",
     "PipelineSummary",
     "STATEMENT_COUNT_METRIC",
+    "TRIVIAL_DELEGATION_RATIO_METRIC",
     "load_cognitive_rules",
     "run_pipeline",
 ]

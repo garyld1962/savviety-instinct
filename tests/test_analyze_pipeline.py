@@ -22,8 +22,8 @@ def _cfg(**overrides) -> InstinctConfig:
 def test_run_single_file_yields_expected_metrics() -> None:
     results, summary = run_pipeline(FIXTURES / "metric_fixtures.py", _cfg())
     results = list(results)
-    # 10 functions × 6 metrics = 60 rows (Slice 4a added max_nesting, npath, identifier_quality).
-    assert len(results) == expected_row_count(n_functions=10, n_modules=0)
+    # 10 functions × 6 metrics + 1 module × 1 metric = 61 rows (Slice 4b added trivial_delegation_ratio).
+    assert len(results) == expected_row_count(n_functions=10, n_modules=1)
     assert summary.files_parsed == 1
     assert summary.files_skipped == 0
     assert summary.functions_analyzed == 10
@@ -32,8 +32,8 @@ def test_run_single_file_yields_expected_metrics() -> None:
 def test_run_directory_walks_recursively() -> None:
     results, summary = run_pipeline(FIXTURES, _cfg())
     results = list(results)
-    # FIXTURES contains multiple .py files. At least 60 rows from metric_fixtures.py.
-    assert len(results) >= expected_row_count(n_functions=10, n_modules=0)
+    # FIXTURES contains multiple .py files. At least 61 rows from metric_fixtures.py.
+    assert len(results) >= expected_row_count(n_functions=10, n_modules=1)
     assert summary.files_parsed >= 1
 
 

@@ -32,8 +32,8 @@ def test_end_to_end_on_metric_fixtures(tmp_path, monkeypatch) -> None:
 
     rows = [line.split("\t") for line in result.output.splitlines() if "\t" in line]
     assert len(rows) == expected_row_count(
-        n_functions=10, n_modules=0
-    )  # 10 functions × 6 metrics (Slice 4a expanded the registry)
+        n_functions=10, n_modules=1
+    )  # 10 functions × 6 metrics + 1 module × 1 metric (Slice 4b added trivial_delegation_ratio)
 
     # Spot check: empty function has cognitive=0, cyclomatic=1, statement_count=0
     empty_rows = [r for r in rows if r[1] == "empty"]

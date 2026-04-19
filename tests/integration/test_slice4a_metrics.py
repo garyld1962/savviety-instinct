@@ -18,7 +18,7 @@ def _write_config(cfg_dir: Path) -> None:
 
 
 def test_cli_emits_six_metrics_per_function(tmp_path, monkeypatch) -> None:
-    """60 rows = 10 functions × 6 metrics (Slice 3 trio + Slice 4a trio)."""
+    """61 rows = 10 functions × 6 metrics (Slice 3 trio + Slice 4a trio) + 1 module × 1 metric."""
     _write_config(tmp_path / ".instinct")
     monkeypatch.chdir(tmp_path)
     runner = CliRunner()
@@ -29,7 +29,7 @@ def test_cli_emits_six_metrics_per_function(tmp_path, monkeypatch) -> None:
     )
     assert result.exit_code == 0
     rows = [line.split("\t") for line in result.output.splitlines() if "\t" in line]
-    assert len(rows) == expected_row_count(n_functions=10, n_modules=0)
+    assert len(rows) == expected_row_count(n_functions=10, n_modules=1)
 
     metric_ids = {r[2].split("=")[0] for r in rows}
     assert metric_ids == {
@@ -39,6 +39,7 @@ def test_cli_emits_six_metrics_per_function(tmp_path, monkeypatch) -> None:
         "max_nesting_depth",
         "npath",
         "identifier_quality",
+        "trivial_delegation_ratio",
     }
 
 

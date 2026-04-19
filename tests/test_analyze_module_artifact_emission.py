@@ -19,10 +19,9 @@ def test_exactly_one_module_artifact_per_parsed_file() -> None:
     results, _ = run_pipeline(FIXTURES / "metric_fixtures.py", _cfg())
     artifacts = {(r[0].kind, r[0].ast_hash) for r in results}
     module_artifacts = [a for a in artifacts if a[0] == ArtifactKind.MODULE]
-    # With zero MODULE metrics in the registry yet, the module artifact appears
-    # in the dedup'd set only if any metric emitted for it. Expected: zero.
-    # Once Task 6 adds the first MODULE metric, this becomes == 1.
-    assert len(module_artifacts) == 0
+    # Task 6 added trivial_delegation_ratio (MODULE scope), so the pipeline now
+    # emits exactly one MODULE row per parsed file.
+    assert len(module_artifacts) == 1
 
 
 def test_module_artifact_fields_when_metric_emits(monkeypatch) -> None:
@@ -60,7 +59,11 @@ def test_module_artifact_fields_when_metric_emits(monkeypatch) -> None:
 
     results, _ = run_pipeline(FIXTURES / "metric_fixtures.py", _cfg())
     rows = list(results)
-    module_rows = [r for r in rows if r[0].kind == ArtifactKind.MODULE]
+    module_rows = [
+        r
+        for r in rows
+        if r[0].kind == ArtifactKind.MODULE and r[1].metric_id == "stub_module_metric"
+    ]
 
     assert len(module_rows) == 1
     artifact, value = module_rows[0]
@@ -109,5 +112,9 @@ def test_empty_module_still_emits_module_artifact(monkeypatch, tmp_path) -> None
 
     results, _ = run_pipeline(empty_file, _cfg())
     rows = list(results)
-    module_rows = [r for r in rows if r[0].kind == ArtifactKind.MODULE]
+    module_rows = [
+        r
+        for r in rows
+        if r[0].kind == ArtifactKind.MODULE and r[1].metric_id == "stub_module_metric"
+    ]
     assert len(module_rows) == 1  # empty module still emits
