@@ -17,6 +17,9 @@ from pathlib import Path
 from savviety_instinct.analyze.metrics import (
     COGNITIVE_METRIC,
     CYCLOMATIC_METRIC,
+    IDENTIFIER_QUALITY_METRIC,
+    MAX_NESTING_DEPTH_METRIC,
+    NPATH_METRIC,
     STATEMENT_COUNT_METRIC,
 )
 from savviety_instinct.config.models import InstinctConfig
@@ -29,7 +32,14 @@ from savviety_instinct.core.types import (
 )
 from savviety_instinct.parse.python import PYTHON_ADAPTER
 
-_METRICS = (STATEMENT_COUNT_METRIC, CYCLOMATIC_METRIC, COGNITIVE_METRIC)
+_METRICS = (
+    STATEMENT_COUNT_METRIC,
+    CYCLOMATIC_METRIC,
+    COGNITIVE_METRIC,
+    MAX_NESTING_DEPTH_METRIC,
+    NPATH_METRIC,
+    IDENTIFIER_QUALITY_METRIC,
+)
 
 
 @dataclass

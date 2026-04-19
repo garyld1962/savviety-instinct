@@ -86,6 +86,14 @@ class FunctionDefNode:
     # Pre-computed during parse to avoid a second tree walk per metric.
     # Excludes pure declarations, blank lines, comments. See arch §1.5.
     statement_count: int = 0
+    # Slice 4a: all identifier occurrences in the function body (INCLUDING
+    # duplicates; metric layer dedupes). Does NOT include the function's
+    # own name or parameter slot declarations — those live on `name` and
+    # `parameter_names`. Parameter references inside the body DO appear
+    # (they're body usages, not declarations). Excludes identifiers inside
+    # nested function_definition / class_definition / lambda (those belong
+    # to the nested scope).
+    identifier_names: tuple[str, ...] = ()
 
     @property
     def is_method(self) -> bool:
