@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from savviety_instinct.core.types import SourceRange
+from savviety_instinct.core.types import Language, SourceRange
 
 
 class ParseErrorKind(StrEnum):
@@ -38,8 +38,13 @@ class FunctionDefNode:
     enclosing_class: str | None  # for methods; None for free functions
     source_range: SourceRange
     ast_hash: str  # computed per arch §4.2
-    is_method: bool
     parameter_names: tuple[str, ...]  # for future signature hashing; not used in Slice 2
+
+    @property
+    def is_method(self) -> bool:
+        """Derived from `enclosing_class`; avoids the inconsistent-state risk of a
+        separate boolean that could disagree with `enclosing_class`."""
+        return self.enclosing_class is not None
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,7 +69,7 @@ class CallSiteNode:
 @dataclass(frozen=True, slots=True)
 class ParseResult:
     file_path: str
-    language: str  # StrEnum value from core.types.Language
+    language: Language
     functions: tuple[FunctionDefNode, ...]
     classes: tuple[ClassDefNode, ...]
     call_sites: tuple[CallSiteNode, ...]
@@ -72,4 +77,11 @@ class ParseResult:
 
     @property
     def ok(self) -> bool:
+        """True iff no errors were encountered during parse.
+
+        Note: a `False` result may still carry partial output in `functions`,
+        `classes`, and `call_sites` — tree-sitter extracts what it can even
+        when syntax errors are present. Callers that short-circuit on `not ok`
+        will drop that partial data silently.
+        """
         return not self.errors
