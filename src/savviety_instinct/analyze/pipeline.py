@@ -52,7 +52,12 @@ def run_pipeline(
     files = _discover_files(path, config.suppress)
 
     def _iter() -> Iterator[tuple[Artifact, MetricValue]]:
-        from savviety_instinct.analyze import METRICS_REGISTRY  # lazy; avoids cycle
+        # Lazy import: analyze/__init__.py imports this module at load, so a
+        # module-level import would form analyze → pipeline → analyze.
+        # NOTE: kept inside _iter (not at run_pipeline top) so tests that
+        # monkeypatch analyze.METRICS_REGISTRY see the patched value — do not
+        # "clean up" to a top-level import without providing another test seam.
+        from savviety_instinct.analyze import METRICS_REGISTRY
 
         for source_path in files:
             result = PYTHON_ADAPTER.parse_path(source_path)
