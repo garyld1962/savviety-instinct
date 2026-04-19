@@ -30,8 +30,8 @@ def test_run_on_single_file_prints_rows(tmp_path, monkeypatch) -> None:
     assert result.exit_code == 0
     # Lines with at least one tab are result rows (summary goes to stderr).
     rows = [line for line in result.stdout.splitlines() if "\t" in line]
-    # 10 functions × 3 metrics = 30 rows
-    assert len(rows) == 30
+    # 10 functions × 6 metrics = 60 rows (Slice 4a added max_nesting, npath, identifier_quality)
+    assert len(rows) == 60
     for row in rows:
         cols = row.split("\t")
         assert len(cols) == 4, row
@@ -46,7 +46,7 @@ def test_run_on_directory_walks(tmp_path, monkeypatch) -> None:
     result = runner.invoke(app, ["run", str(FIXTURES)], catch_exceptions=False)
     assert result.exit_code == 0
     rows = [line for line in result.stdout.splitlines() if "\t" in line]
-    assert len(rows) >= 30
+    assert len(rows) >= 60
 
 
 def test_run_on_nonexistent_path_exits_nonzero(tmp_path, monkeypatch) -> None:
