@@ -24,6 +24,8 @@ from savviety_instinct.parse.hashing import hash_ast_sexp
 from savviety_instinct.parse.types import (
     CallSiteNode,
     ClassDefNode,
+    ControlFlowNode,
+    ControlFlowNodeKind,
     FunctionDefNode,
     ParseError,
     ParseErrorKind,
@@ -31,6 +33,55 @@ from savviety_instinct.parse.types import (
 )
 
 _PY_LANGUAGE = TSLanguage(tspython.language())
+
+# Tree-sitter-python node-type → ControlFlowNodeKind mapping.
+# Note: if_statement uses "consequence" (not "body") for its block.
+# elif_clause also uses "consequence"; else_clause uses "body".
+_TS_TO_CFN_KIND: dict[str, ControlFlowNodeKind] = {
+    "if_statement": ControlFlowNodeKind.IF,
+    "elif_clause": ControlFlowNodeKind.ELIF,
+    "else_clause": ControlFlowNodeKind.ELSE,
+    "for_statement": ControlFlowNodeKind.FOR,
+    "while_statement": ControlFlowNodeKind.WHILE,
+    "try_statement": ControlFlowNodeKind.TRY,
+    "except_clause": ControlFlowNodeKind.EXCEPT,
+    "conditional_expression": ControlFlowNodeKind.TERNARY,
+}
+
+_COMPREHENSION_TYPES: frozenset[str] = frozenset(
+    {
+        "list_comprehension",
+        "set_comprehension",
+        "dictionary_comprehension",
+        "generator_expression",
+    }
+)
+
+# Python statement node types — used by _count_statements.
+# Executable statements only; excludes pure declarations, blank lines, comments.
+_STATEMENT_NODE_TYPES: frozenset[str] = frozenset(
+    {
+        "expression_statement",
+        "if_statement",
+        "for_statement",
+        "while_statement",
+        "try_statement",
+        "with_statement",
+        "return_statement",
+        "raise_statement",
+        "break_statement",
+        "continue_statement",
+        "pass_statement",
+        "import_statement",
+        "import_from_statement",
+        "global_statement",
+        "nonlocal_statement",
+        "assert_statement",
+        "delete_statement",
+        "function_definition",
+        "class_definition",
+    }
+)
 
 
 def _make_parser() -> Parser:
@@ -100,6 +151,224 @@ def _sexp(node: Node) -> str:
     return str(node)
 
 
+def _classify_cfn(node: Node) -> ControlFlowNodeKind | None:
+    if node.type in _TS_TO_CFN_KIND:
+        return _TS_TO_CFN_KIND[node.type]
+    if node.type in _COMPREHENSION_TYPES:
+        return ControlFlowNodeKind.COMPREHENSION
+    if node.type == "boolean_operator":
+        return ControlFlowNodeKind.BOOLEAN_SEQUENCE
+    return None
+
+
+def _is_nested_boolean_operator(node: Node) -> bool:
+    """True if this boolean_operator is nested inside another boolean_operator.
+
+    Used to emit ONE CFN per outermost boolean_operator tree (Sonar semantics:
+    per group, not per operator).
+    """
+    if node.type != "boolean_operator":
+        return False
+    parent = node.parent
+    while parent is not None:
+        if parent.type == "boolean_operator":
+            return True
+        parent = parent.parent
+    return False
+
+
+def _block_of(node: Node) -> Node | None:
+    """Return the body/consequence block of a control-flow node.
+
+    tree-sitter-python field names by node type:
+    - if_statement:  consequence (block)
+    - elif_clause:   consequence (block)
+    - else_clause:   body (block)
+    - for_statement: body (block)
+    - while_statement: body (block)
+    - except_clause: no field name — find by type among children
+    """
+    if node.type in ("if_statement", "elif_clause"):
+        return node.child_by_field_name("consequence")
+    if node.type == "except_clause":
+        # except_clause has no named field for its block; find by type
+        for child in node.children:
+            if child.type == "block":
+                return child
+        return None
+    return node.child_by_field_name("body")
+
+
+def _collect_cfns_rec(node: Node, file_path: str, depth: int, out: list[ControlFlowNode]) -> None:
+    kind = _classify_cfn(node)
+
+    if kind == ControlFlowNodeKind.BOOLEAN_SEQUENCE and _is_nested_boolean_operator(node):
+        # Skip — part of an outer boolean sequence already emitted.
+        # Still recurse into children in case they contain other CFNs.
+        for child in node.children:
+            _collect_cfns_rec(child, file_path, depth, out)
+        return
+
+    if kind is not None:
+        if kind == ControlFlowNodeKind.IF:
+            # if body: children at depth+1
+            children_cfns: list[ControlFlowNode] = []
+            consequence = node.child_by_field_name("consequence")
+            if consequence is not None:
+                _collect_cfns_into(consequence, file_path, depth + 1, children_cfns)
+            out.append(
+                ControlFlowNode(
+                    kind=ControlFlowNodeKind.IF,
+                    source_range=_source_range(node, file_path),
+                    nesting_depth=depth,
+                    children=tuple(children_cfns),
+                )
+            )
+            # elif/else clauses are SIBLINGS of the if at the same depth.
+            # tree-sitter-python places them as direct children of if_statement
+            # with field name "alternative" — there can be multiple.
+            for child in node.children:
+                if child.type in ("elif_clause", "else_clause"):
+                    alt_kind = (
+                        ControlFlowNodeKind.ELIF
+                        if child.type == "elif_clause"
+                        else ControlFlowNodeKind.ELSE
+                    )
+                    alt_block = _block_of(child)
+                    alt_children: list[ControlFlowNode] = []
+                    if alt_block is not None:
+                        _collect_cfns_into(alt_block, file_path, depth + 1, alt_children)
+                    out.append(
+                        ControlFlowNode(
+                            kind=alt_kind,
+                            source_range=_source_range(child, file_path),
+                            nesting_depth=depth,
+                            children=tuple(alt_children),
+                        )
+                    )
+            return
+
+        if kind == ControlFlowNodeKind.TRY:
+            children_cfns = []
+            body = node.child_by_field_name("body")
+            if body is not None:
+                _collect_cfns_into(body, file_path, depth + 1, children_cfns)
+            out.append(
+                ControlFlowNode(
+                    kind=ControlFlowNodeKind.TRY,
+                    source_range=_source_range(node, file_path),
+                    nesting_depth=depth,
+                    children=tuple(children_cfns),
+                )
+            )
+            # except clauses: emit as siblings at same depth
+            for child in node.children:
+                if child.type == "except_clause":
+                    exc_block = _block_of(child)
+                    exc_children: list[ControlFlowNode] = []
+                    if exc_block is not None:
+                        _collect_cfns_into(exc_block, file_path, depth + 1, exc_children)
+                    out.append(
+                        ControlFlowNode(
+                            kind=ControlFlowNodeKind.EXCEPT,
+                            source_range=_source_range(child, file_path),
+                            nesting_depth=depth,
+                            children=tuple(exc_children),
+                        )
+                    )
+            return
+
+        # General case: leaf CFNs (boolean, ternary, comprehension) have no body
+        # to recurse into for CFN purposes. Compound CFNs (for, while, else, elif,
+        # except) use _block_of to find their body.
+        if kind in (
+            ControlFlowNodeKind.BOOLEAN_SEQUENCE,
+            ControlFlowNodeKind.TERNARY,
+            ControlFlowNodeKind.COMPREHENSION,
+        ):
+            out.append(
+                ControlFlowNode(
+                    kind=kind,
+                    source_range=_source_range(node, file_path),
+                    nesting_depth=depth,
+                    children=(),
+                )
+            )
+            return
+
+        # Remaining compound CFNs (for, while — elif/else/except handled above)
+        children_cfns = []
+        block = _block_of(node)
+        if block is not None:
+            _collect_cfns_into(block, file_path, depth + 1, children_cfns)
+        out.append(
+            ControlFlowNode(
+                kind=kind,
+                source_range=_source_range(node, file_path),
+                nesting_depth=depth,
+                children=tuple(children_cfns),
+            )
+        )
+        return
+
+    # Not a CFN — but descendants might contain CFNs (e.g., an
+    # expression_statement wrapping a ternary, or an assignment RHS with a
+    # comprehension). Recurse without changing depth.
+    for child in node.children:
+        _collect_cfns_rec(child, file_path, depth, out)
+
+
+def _collect_cfns_into(
+    container: Node, file_path: str, depth: int, out: list[ControlFlowNode]
+) -> None:
+    """Collect CFNs from a block node's direct children into `out`."""
+    for child in container.children:
+        _collect_cfns_rec(child, file_path, depth, out)
+
+
+def _collect_control_flow(body_node: Node, file_path: str) -> tuple[ControlFlowNode, ...]:
+    """Walk a function body node emitting top-level CFNs at depth 0."""
+    out: list[ControlFlowNode] = []
+    _collect_cfns_into(body_node, file_path, 0, out)
+    return tuple(out)
+
+
+def _count_statements(body_node: Node) -> int:
+    """Count executable statements in a function body, recursively.
+
+    A compound statement (if/for/while/try/with) counts as 1, and its body's
+    statements are added recursively. elif/else/except clauses are also
+    recursed. See arch §1.5.
+    """
+    count = 0
+    stack: list[Node] = list(body_node.children)
+    while stack:
+        node = stack.pop()
+        if node.type in _STATEMENT_NODE_TYPES:
+            count += 1
+            # Recurse into compound statements' bodies (if/elif use "consequence")
+            if node.type in ("if_statement", "elif_clause"):
+                block = node.child_by_field_name("consequence")
+            elif node.type == "except_clause":
+                block = _block_of(node)
+            else:
+                block = node.child_by_field_name("body")
+            if block is not None:
+                stack.extend(block.children)
+            # Alternative/supplemental branches: elif, else, except, finally
+            for child in node.children:
+                if child.type in (
+                    "elif_clause",
+                    "else_clause",
+                    "except_clause",
+                    "finally_clause",
+                ):
+                    alt_block = _block_of(child)
+                    if alt_block is not None:
+                        stack.extend(alt_block.children)
+    return count
+
+
 def _collect_syntax_errors(tree: Tree, source: bytes, file_path: str) -> list[ParseError]:
     errors: list[ParseError] = []
     stack: list[Node] = [tree.root_node]
@@ -131,6 +400,11 @@ def _collect_functions(
             name = _text(name_node, source)
             qualified = f"{enclosing_class}.{name}" if enclosing_class else name
             params = _extract_parameter_names(node, source)
+            body_node = node.child_by_field_name("body")
+            control_flow = (
+                _collect_control_flow(body_node, file_path) if body_node is not None else ()
+            )
+            statement_count = _count_statements(body_node) if body_node is not None else 0
             out.append(
                 (
                     FunctionDefNode(
@@ -140,6 +414,8 @@ def _collect_functions(
                         source_range=_source_range(node, file_path),
                         ast_hash=hash_ast_sexp(_sexp(node)),
                         parameter_names=params,
+                        control_flow=control_flow,
+                        statement_count=statement_count,
                     ),
                     node,
                 )
