@@ -108,3 +108,22 @@ def test_metric_protocol_rejects_missing_compute():
 
     # runtime_checkable verifies method presence; Incomplete is missing compute().
     assert not isinstance(Incomplete(), Metric)
+
+
+def test_analysis_context_accepts_call_graph() -> None:
+    """Slice 2 forward-compat: AnalysisContext now carries an optional CallGraph."""
+    from savviety_instinct.core.types import AnalysisContext
+    from savviety_instinct.graph import CallGraph
+
+    cg = CallGraph()
+    cg.add_function("main", ast_hash="abc", file_path="x.py")
+    ctx = AnalysisContext(call_graph=cg)
+    assert ctx.call_graph is cg
+
+
+def test_analysis_context_call_graph_defaults_to_none() -> None:
+    """Existing call sites with no call_graph continue to work."""
+    from savviety_instinct.core.types import AnalysisContext
+
+    ctx = AnalysisContext()
+    assert ctx.call_graph is None
