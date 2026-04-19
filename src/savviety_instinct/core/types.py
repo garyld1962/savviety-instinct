@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from savviety_instinct.graph.types import CallGraph
+    from savviety_instinct.parse.types import ParseResult
 
 
 class Language(StrEnum):
@@ -74,13 +75,15 @@ class MetricValue:
 class AnalysisContext:
     """Context passed to each Metric.compute().
 
-    Slice 2: adds `call_graph` (optional; defaults to None so Slice 1 call
-    sites remain valid). Slice 3+ will add module graph, import set, framework
-    indicators per arch §5.3. All fields MUST be keyword-only with defaults so
-    future extensions stay additive.
+    Slice 2 added `call_graph`. Slice 3 adds `parse_result` so metrics can
+    look up their own function's ControlFlowNode / statement_count without
+    a second tree walk. All fields are keyword-only with defaults; the
+    absolute core → (parse|graph) layering rule is preserved via
+    TYPE_CHECKING + string annotations (arch §2).
     """
 
-    call_graph: "CallGraph | None" = None  # noqa: UP037 — explicit forward-ref, belt-and-suspenders
+    call_graph: "CallGraph | None" = None  # noqa: UP037 — quoted for explicit forward-ref
+    parse_result: "ParseResult | None" = None  # noqa: UP037 — quoted for explicit forward-ref
 
 
 @runtime_checkable
