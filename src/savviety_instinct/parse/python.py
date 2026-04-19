@@ -123,6 +123,10 @@ class PythonAdapter:
         classes = tuple(_collect_classes(tree, source, file_path, functions))
         call_sites = tuple(_collect_call_sites(source, file_path, fn_with_nodes))
 
+        # Slice 4b: 1-indexed line count. tree-sitter's root is always valid even
+        # when parse errors are present, so end_point is safe to read.
+        line_count = tree.root_node.end_point[0] + 1
+
         return ParseResult(
             file_path=file_path,
             language=Language.PYTHON,
@@ -130,6 +134,7 @@ class PythonAdapter:
             classes=classes,
             call_sites=call_sites,
             errors=errors,
+            line_count=line_count,
         )
 
 

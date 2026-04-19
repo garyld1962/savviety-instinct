@@ -128,6 +128,10 @@ class ParseResult:
     classes: tuple[ClassDefNode, ...]
     call_sites: tuple[CallSiteNode, ...]
     errors: tuple[ParseError, ...] = field(default=())
+    # Slice 4b: line count of the parsed source, 1-indexed (last line number).
+    # Populated from tree-sitter's root_node.end_point[0] + 1. Used by the
+    # pipeline to build MODULE artifact source_ranges without re-reading the file.
+    line_count: int = 0
 
     @property
     def ok(self) -> bool:

@@ -38,3 +38,13 @@ __all__ = [
     "load_cognitive_rules",
     "run_pipeline",
 ]
+
+# Slice 4b: fail-fast on a metric with empty applies_to. An empty frozenset
+# means the pipeline filter silently drops the metric from all artifacts —
+# no exception, no test failure unless the metric-specific test catches it.
+# Asserting here is cheap (module-load time) and catches the footgun at its
+# source.
+assert all(m.applies_to for m in METRICS_REGISTRY), (
+    "every Metric must declare at least one ArtifactKind in applies_to; "
+    "an empty frozenset means the pipeline filter will drop it silently"
+)

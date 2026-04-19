@@ -21,8 +21,11 @@ from savviety_instinct.core.types import (
     ArtifactKind,
     Language,
     MetricValue,
+    SourceRange,
 )
+from savviety_instinct.parse.hashing import hash_ast_sexp
 from savviety_instinct.parse.python import PYTHON_ADAPTER
+from savviety_instinct.parse.types import FunctionDefNode
 
 
 @dataclass
@@ -63,18 +66,42 @@ def run_pipeline(
                 continue
             summary.files_parsed += 1
             ctx = AnalysisContext(parse_result=result)
+
+            # Slice 4b: build MODULE artifact for this file.
+            module_artifact = Artifact(
+                ast_hash=_module_ast_hash(result.functions),
+                language=Language.PYTHON,
+                kind=ArtifactKind.MODULE,
+                name=str(source_path),
+                enclosing_scope=None,
+                source_range=SourceRange(
+                    file_path=str(source_path),
+                    line_start=1,
+                    line_end=max(result.line_count, 1),
+                ),
+            )
+
+            # Build FUNCTION artifacts.
+            function_artifacts: list[Artifact] = []
             for fn in result.functions:
                 summary.functions_analyzed += 1
-                artifact = Artifact(
-                    ast_hash=fn.ast_hash,
-                    language=Language.PYTHON,
-                    kind=ArtifactKind.FUNCTION,
-                    name=fn.name,
-                    enclosing_scope=fn.enclosing_class,
-                    source_range=fn.source_range,
+                function_artifacts.append(
+                    Artifact(
+                        ast_hash=fn.ast_hash,
+                        language=Language.PYTHON,
+                        kind=ArtifactKind.FUNCTION,
+                        name=fn.name,
+                        enclosing_scope=fn.enclosing_class,
+                        source_range=fn.source_range,
+                    )
                 )
+
+            # Dispatch: module first for deterministic ordering, then functions.
+            # Apply applies_to filter so each metric only fires on its intended kinds.
+            for artifact in [module_artifact, *function_artifacts]:
                 for metric in METRICS_REGISTRY:
-                    yield artifact, metric.compute(artifact, ctx)
+                    if artifact.kind in metric.applies_to:
+                        yield artifact, metric.compute(artifact, ctx)
 
     return _iter(), summary
 
@@ -96,3 +123,18 @@ def _discover_files(path: Path, suppress: list[str]) -> list[Path]:
 def _is_suppressed(path: Path, patterns: list[str]) -> bool:
     s = str(path)
     return any(fnmatch.fnmatch(s, pat) for pat in patterns)
+
+
+def _module_ast_hash(functions: tuple[FunctionDefNode, ...]) -> str:
+    """Shape-invariant hash for a module artifact.
+
+    Defined as hash_ast_sexp(joined function ast_hashes). Changes when a
+    function is added, removed, or structurally modified; invariant across
+    identifier/literal renames (per-function ast_hash is already invariant).
+
+    Modules with zero functions get a stable hash of the empty joined string;
+    consistent across empty modules. Uses hash_ast_sexp so the backend
+    (blake3 / xxhash) is consistent with per-function ast_hash from Slice 2.
+    """
+    joined = "|".join(fn.ast_hash for fn in functions)
+    return hash_ast_sexp(joined)
