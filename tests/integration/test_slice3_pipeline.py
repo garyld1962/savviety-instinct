@@ -7,6 +7,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from savviety_instinct.cli.app import app
+from tests._helpers import expected_row_count
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "python"
 
@@ -30,7 +31,9 @@ def test_end_to_end_on_metric_fixtures(tmp_path, monkeypatch) -> None:
     assert result.exit_code == 0
 
     rows = [line.split("\t") for line in result.output.splitlines() if "\t" in line]
-    assert len(rows) == 60  # 10 functions × 6 metrics (Slice 4a expanded the registry)
+    assert len(rows) == expected_row_count(
+        n_functions=10, n_modules=0
+    )  # 10 functions × 6 metrics (Slice 4a expanded the registry)
 
     # Spot check: empty function has cognitive=0, cyclomatic=1, statement_count=0
     empty_rows = [r for r in rows if r[1] == "empty"]

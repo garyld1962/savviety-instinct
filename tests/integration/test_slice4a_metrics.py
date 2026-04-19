@@ -7,6 +7,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from savviety_instinct.cli.app import app
+from tests._helpers import expected_row_count
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "python"
 
@@ -28,7 +29,7 @@ def test_cli_emits_six_metrics_per_function(tmp_path, monkeypatch) -> None:
     )
     assert result.exit_code == 0
     rows = [line.split("\t") for line in result.output.splitlines() if "\t" in line]
-    assert len(rows) == 60
+    assert len(rows) == expected_row_count(n_functions=10, n_modules=0)
 
     metric_ids = {r[2].split("=")[0] for r in rows}
     assert metric_ids == {
