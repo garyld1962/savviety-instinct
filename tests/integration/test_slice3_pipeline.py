@@ -37,7 +37,7 @@ def test_end_to_end_on_metric_fixtures(tmp_path, monkeypatch) -> None:
 
     # Spot check: empty function has cognitive=0, cyclomatic=1, statement_count=0
     empty_rows = [r for r in rows if r[1] == "empty"]
-    assert len(empty_rows) == 6  # 6 metrics per function post-Slice-4a
+    assert len(empty_rows) == expected_row_count(n_functions=1, n_modules=0)
     metric_to_value = {r[2].split("=")[0]: r[2].split("=")[1] for r in empty_rows}
     assert metric_to_value["cognitive_complexity"] == "0"
     assert metric_to_value["cyclomatic_complexity"] == "1"
