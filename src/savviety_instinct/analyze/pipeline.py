@@ -1,0 +1,103 @@
+"""Analysis pipeline — walk a path, parse each source file, compute metrics.
+
+Arch §5.3. Slice 3: single-threaded, synchronous, no storage writes. Yields
+`(Artifact, MetricValue)` tuples for CLI consumers. Parse errors are soft —
+file skipped, logged to stderr, counted in summary. Non-parse errors
+propagate.
+"""
+
+from __future__ import annotations
+
+import fnmatch
+import sys
+from collections.abc import Iterator
+from dataclasses import dataclass
+from pathlib import Path
+
+from savviety_instinct.analyze.metrics import (
+    COGNITIVE_METRIC,
+    CYCLOMATIC_METRIC,
+    STATEMENT_COUNT_METRIC,
+)
+from savviety_instinct.config.models import InstinctConfig
+from savviety_instinct.core.types import (
+    AnalysisContext,
+    Artifact,
+    ArtifactKind,
+    Language,
+    MetricValue,
+)
+from savviety_instinct.parse.python import PYTHON_ADAPTER
+
+_METRICS = (STATEMENT_COUNT_METRIC, CYCLOMATIC_METRIC, COGNITIVE_METRIC)
+
+
+@dataclass
+class PipelineSummary:
+    """Mutable summary. Callers drain the iterator before reading."""
+
+    files_parsed: int = 0
+    files_skipped: int = 0
+    functions_analyzed: int = 0
+
+
+def run_pipeline(
+    path: Path, config: InstinctConfig
+) -> tuple[Iterator[tuple[Artifact, MetricValue]], PipelineSummary]:
+    """Return (generator of (Artifact, MetricValue), summary).
+
+    The summary is a mutable dataclass updated as the generator yields. Callers
+    should drain the iterator before reading summary fields.
+    """
+    if not path.exists():
+        raise FileNotFoundError(f"Path not found: {path}")
+
+    summary = PipelineSummary()
+    files = _discover_files(path, config.suppress)
+
+    def _iter() -> Iterator[tuple[Artifact, MetricValue]]:
+        for source_path in files:
+            result = PYTHON_ADAPTER.parse_path(source_path)
+            if not result.ok:
+                summary.files_skipped += 1
+                err = result.errors[0] if result.errors else None
+                print(
+                    f"[parse-error] {source_path}: {err.message if err else 'unknown'}",
+                    file=sys.stderr,
+                )
+                continue
+            summary.files_parsed += 1
+            ctx = AnalysisContext(parse_result=result)
+            for fn in result.functions:
+                summary.functions_analyzed += 1
+                artifact = Artifact(
+                    ast_hash=fn.ast_hash,
+                    language=Language.PYTHON,
+                    kind=ArtifactKind.FUNCTION,
+                    name=fn.name,
+                    enclosing_scope=fn.enclosing_class,
+                    source_range=fn.source_range,
+                )
+                for metric in _METRICS:
+                    yield artifact, metric.compute(artifact, ctx)
+
+    return _iter(), summary
+
+
+def _discover_files(path: Path, suppress: list[str]) -> list[Path]:
+    """Enumerate .py files under path honoring glob suppressions.
+
+    Returns a sorted list for deterministic iteration. `path` may be a file
+    (returned as-is unless suppressed) or a directory.
+    """
+    if path.is_file():
+        if _is_suppressed(path, suppress):
+            return []
+        return [path] if path.suffix == ".py" else []
+    candidates = sorted(path.rglob("*.py"))
+    return [p for p in candidates if not _is_suppressed(p, suppress)]
+
+
+def _is_suppressed(path: Path, patterns: list[str]) -> bool:
+    s = str(path)
+    return any(fnmatch.fnmatch(s, pat) for pat in patterns)
