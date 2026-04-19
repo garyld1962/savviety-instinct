@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from savviety_instinct.analyze.metrics.cognitive import COGNITIVE_METRIC
 from savviety_instinct.analyze.metrics.cyclomatic import CYCLOMATIC_METRIC
+from savviety_instinct.analyze.metrics.function_length_bimodality import (
+    FUNCTION_LENGTH_BIMODALITY_METRIC,
+)
 from savviety_instinct.analyze.metrics.identifier_quality import IDENTIFIER_QUALITY_METRIC
 from savviety_instinct.analyze.metrics.max_nesting_depth import MAX_NESTING_DEPTH_METRIC
 from savviety_instinct.analyze.metrics.median_function_length import (
@@ -18,6 +21,7 @@ from savviety_instinct.analyze.metrics.trivial_delegation_ratio import (
 __all__ = [
     "COGNITIVE_METRIC",
     "CYCLOMATIC_METRIC",
+    "FUNCTION_LENGTH_BIMODALITY_METRIC",
     "IDENTIFIER_QUALITY_METRIC",
     "MAX_NESTING_DEPTH_METRIC",
     "MEDIAN_FUNCTION_LENGTH_METRIC",

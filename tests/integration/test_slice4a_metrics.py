@@ -41,6 +41,7 @@ def test_cli_emits_six_metrics_per_function(tmp_path, monkeypatch) -> None:
         "identifier_quality",
         "trivial_delegation_ratio",
         "median_function_length",
+        "function_length_bimodality",
     }
 
 
