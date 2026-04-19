@@ -14,14 +14,6 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-from savviety_instinct.analyze.metrics import (
-    COGNITIVE_METRIC,
-    CYCLOMATIC_METRIC,
-    IDENTIFIER_QUALITY_METRIC,
-    MAX_NESTING_DEPTH_METRIC,
-    NPATH_METRIC,
-    STATEMENT_COUNT_METRIC,
-)
 from savviety_instinct.config.models import InstinctConfig
 from savviety_instinct.core.types import (
     AnalysisContext,
@@ -31,15 +23,6 @@ from savviety_instinct.core.types import (
     MetricValue,
 )
 from savviety_instinct.parse.python import PYTHON_ADAPTER
-
-_METRICS = (
-    STATEMENT_COUNT_METRIC,
-    CYCLOMATIC_METRIC,
-    COGNITIVE_METRIC,
-    MAX_NESTING_DEPTH_METRIC,
-    NPATH_METRIC,
-    IDENTIFIER_QUALITY_METRIC,
-)
 
 
 @dataclass
@@ -66,6 +49,8 @@ def run_pipeline(
     files = _discover_files(path, config.suppress)
 
     def _iter() -> Iterator[tuple[Artifact, MetricValue]]:
+        from savviety_instinct.analyze import METRICS_REGISTRY  # lazy; avoids cycle
+
         for source_path in files:
             result = PYTHON_ADAPTER.parse_path(source_path)
             if not result.ok:
@@ -88,7 +73,7 @@ def run_pipeline(
                     enclosing_scope=fn.enclosing_class,
                     source_range=fn.source_range,
                 )
-                for metric in _METRICS:
+                for metric in METRICS_REGISTRY:
                     yield artifact, metric.compute(artifact, ctx)
 
     return _iter(), summary
