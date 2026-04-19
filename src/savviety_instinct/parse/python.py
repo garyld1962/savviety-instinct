@@ -214,7 +214,7 @@ def _collect_cfns_rec(node: Node, file_path: str, depth: int, out: list[ControlF
 
     if kind is not None:
         if kind == ControlFlowNodeKind.IF:
-            # if body: children at depth+1
+            # if body: children at depth+1 (only nested CFNs inside the block)
             children_cfns: list[ControlFlowNode] = []
             consequence = node.child_by_field_name("consequence")
             if consequence is not None:
@@ -227,6 +227,13 @@ def _collect_cfns_rec(node: Node, file_path: str, depth: int, out: list[ControlF
                     children=tuple(children_cfns),
                 )
             )
+            # Condition-expression CFNs (boolean_sequence, ternary, comprehension)
+            # are emitted as SIBLINGS at the same depth — no nesting penalty.
+            # Sonar semantics: boolean operators in a condition are flat +1 each,
+            # never nesting-penalised.
+            for child in node.children:
+                if child.type not in ("block", "elif_clause", "else_clause", "if", ":", "comment"):
+                    _collect_cfns_rec(child, file_path, depth, out)
             # elif/else clauses are SIBLINGS of the if at the same depth.
             # tree-sitter-python places them as direct children of if_statement
             # with field name "alternative" — there can be multiple.
