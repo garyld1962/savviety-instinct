@@ -8,7 +8,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from savviety_instinct.graph.types import CallGraph
 
 
 class Language(StrEnum):
@@ -71,10 +74,13 @@ class MetricValue:
 class AnalysisContext:
     """Context passed to each Metric.compute().
 
-    Slice 1: placeholder with no fields. Slice 2+ will add call graph,
-    module graph, import set, framework indicators, etc. per arch §5.3,
-    using keyword-only fields with defaults so construction stays compatible.
+    Slice 2: adds `call_graph` (optional; defaults to None so Slice 1 call
+    sites remain valid). Slice 3+ will add module graph, import set, framework
+    indicators per arch §5.3. All fields MUST be keyword-only with defaults so
+    future extensions stay additive.
     """
+
+    call_graph: "CallGraph | None" = None  # noqa: UP037 — explicit forward-ref, belt-and-suspenders
 
 
 @runtime_checkable
