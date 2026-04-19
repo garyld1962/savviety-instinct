@@ -59,6 +59,8 @@ _COMPREHENSION_TYPES: frozenset[str] = frozenset(
 
 # Python statement node types — used by _count_statements.
 # Executable statements only; excludes pure declarations, blank lines, comments.
+# except_clause is included so each handler arm counts as one statement (like
+# cyclomatic complexity counts it as a branch).
 _STATEMENT_NODE_TYPES: frozenset[str] = frozenset(
     {
         "expression_statement",
@@ -66,6 +68,7 @@ _STATEMENT_NODE_TYPES: frozenset[str] = frozenset(
         "for_statement",
         "while_statement",
         "try_statement",
+        "except_clause",
         "with_statement",
         "return_statement",
         "raise_statement",
@@ -333,18 +336,34 @@ def _collect_control_flow(body_node: Node, file_path: str) -> tuple[ControlFlowN
     return tuple(out)
 
 
+def _is_docstring_node(node: Node) -> bool:
+    """True if this expression_statement contains only a string literal.
+
+    Such nodes arise from docstrings (and bare string expressions used as
+    comments). They are executable in the CPython sense but carry no
+    control-flow intent, so they are excluded from statement_count.
+    """
+    if node.type != "expression_statement":
+        return False
+    named = [c for c in node.children if c.is_named]
+    return len(named) == 1 and named[0].type == "string"
+
+
 def _count_statements(body_node: Node) -> int:
     """Count executable statements in a function body, recursively.
 
     A compound statement (if/for/while/try/with) counts as 1, and its body's
-    statements are added recursively. elif/else/except clauses are also
-    recursed. See arch §1.5.
+    statements are added recursively. except_clause counts as 1 and its body
+    is recursed (same as a branch arm). Pure string expression_statements
+    (docstrings) are excluded. See arch §1.5.
     """
     count = 0
     stack: list[Node] = list(body_node.children)
     while stack:
         node = stack.pop()
         if node.type in _STATEMENT_NODE_TYPES:
+            if _is_docstring_node(node):
+                continue
             count += 1
             # Recurse into compound statements' bodies (if/elif use "consequence")
             if node.type in ("if_statement", "elif_clause"):
@@ -355,17 +374,16 @@ def _count_statements(body_node: Node) -> int:
                 block = node.child_by_field_name("body")
             if block is not None:
                 stack.extend(block.children)
-            # Alternative/supplemental branches: elif, else, except, finally
+            # Alternative/supplemental branches: elif, else, finally.
+            # except_clause is now in _STATEMENT_NODE_TYPES; push the node
+            # itself so it is counted and its body recursed in the normal path.
             for child in node.children:
-                if child.type in (
-                    "elif_clause",
-                    "else_clause",
-                    "except_clause",
-                    "finally_clause",
-                ):
+                if child.type in ("elif_clause", "else_clause", "finally_clause"):
                     alt_block = _block_of(child)
                     if alt_block is not None:
                         stack.extend(alt_block.children)
+                elif child.type == "except_clause":
+                    stack.append(child)
     return count
 
 
