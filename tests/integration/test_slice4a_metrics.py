@@ -40,6 +40,7 @@ def test_cli_emits_six_metrics_per_function(tmp_path, monkeypatch) -> None:
         "npath",
         "identifier_quality",
         "trivial_delegation_ratio",
+        "median_function_length",
     }
 
 
