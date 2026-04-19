@@ -60,7 +60,7 @@ def _bimodality_coefficient(samples: Sequence[int]) -> float:
     denom = kurtosis + 3 * (n - 1) ** 2 / ((n - 2) * (n - 3))
     if denom == 0:  # defensive — shouldn't happen for n ≥ 4
         return 0.0
-    return (skewness**2 + 1) / denom
+    return float((skewness**2 + 1) / denom)
 
 
 class FunctionLengthBimodalityMetric:
