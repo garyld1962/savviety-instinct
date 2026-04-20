@@ -7,6 +7,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from savviety_instinct.cli.app import app
+from tests._helpers import expected_row_count
 
 FIXTURES = Path(__file__).parent / "fixtures" / "python"
 
@@ -30,8 +31,8 @@ def test_run_on_single_file_prints_rows(tmp_path, monkeypatch) -> None:
     assert result.exit_code == 0
     # Lines with at least one tab are result rows (summary goes to stderr).
     rows = [line for line in result.stdout.splitlines() if "\t" in line]
-    # 10 functions × 6 metrics = 60 rows (Slice 4a added max_nesting, npath, identifier_quality)
-    assert len(rows) == 60
+    # 10 functions × 6 metrics + 1 module × 1 metric = 61 rows (Slice 4b added trivial_delegation_ratio)
+    assert len(rows) == expected_row_count(n_functions=10, n_modules=1)
     for row in rows:
         cols = row.split("\t")
         assert len(cols) == 4, row
@@ -46,7 +47,7 @@ def test_run_on_directory_walks(tmp_path, monkeypatch) -> None:
     result = runner.invoke(app, ["run", str(FIXTURES)], catch_exceptions=False)
     assert result.exit_code == 0
     rows = [line for line in result.stdout.splitlines() if "\t" in line]
-    assert len(rows) >= 60
+    assert len(rows) >= expected_row_count(n_functions=10, n_modules=1)
 
 
 def test_run_on_nonexistent_path_exits_nonzero(tmp_path, monkeypatch) -> None:

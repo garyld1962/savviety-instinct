@@ -7,6 +7,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from savviety_instinct.cli.app import app
+from tests._helpers import expected_row_count
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "python"
 
@@ -17,7 +18,7 @@ def _write_config(cfg_dir: Path) -> None:
 
 
 def test_cli_emits_six_metrics_per_function(tmp_path, monkeypatch) -> None:
-    """60 rows = 10 functions × 6 metrics (Slice 3 trio + Slice 4a trio)."""
+    """61 rows = 10 functions × 6 metrics (Slice 3 trio + Slice 4a trio) + 1 module × 1 metric."""
     _write_config(tmp_path / ".instinct")
     monkeypatch.chdir(tmp_path)
     runner = CliRunner()
@@ -28,7 +29,7 @@ def test_cli_emits_six_metrics_per_function(tmp_path, monkeypatch) -> None:
     )
     assert result.exit_code == 0
     rows = [line.split("\t") for line in result.output.splitlines() if "\t" in line]
-    assert len(rows) == 60
+    assert len(rows) == expected_row_count(n_functions=10, n_modules=1)
 
     metric_ids = {r[2].split("=")[0] for r in rows}
     assert metric_ids == {
@@ -38,6 +39,9 @@ def test_cli_emits_six_metrics_per_function(tmp_path, monkeypatch) -> None:
         "max_nesting_depth",
         "npath",
         "identifier_quality",
+        "trivial_delegation_ratio",
+        "median_function_length",
+        "function_length_bimodality",
     }
 
 

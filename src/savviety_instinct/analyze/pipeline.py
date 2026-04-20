@@ -14,14 +14,6 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-from savviety_instinct.analyze.metrics import (
-    COGNITIVE_METRIC,
-    CYCLOMATIC_METRIC,
-    IDENTIFIER_QUALITY_METRIC,
-    MAX_NESTING_DEPTH_METRIC,
-    NPATH_METRIC,
-    STATEMENT_COUNT_METRIC,
-)
 from savviety_instinct.config.models import InstinctConfig
 from savviety_instinct.core.types import (
     AnalysisContext,
@@ -29,17 +21,11 @@ from savviety_instinct.core.types import (
     ArtifactKind,
     Language,
     MetricValue,
+    SourceRange,
 )
+from savviety_instinct.parse.hashing import hash_ast_sexp
 from savviety_instinct.parse.python import PYTHON_ADAPTER
-
-_METRICS = (
-    STATEMENT_COUNT_METRIC,
-    CYCLOMATIC_METRIC,
-    COGNITIVE_METRIC,
-    MAX_NESTING_DEPTH_METRIC,
-    NPATH_METRIC,
-    IDENTIFIER_QUALITY_METRIC,
-)
+from savviety_instinct.parse.types import FunctionDefNode
 
 
 @dataclass
@@ -66,6 +52,13 @@ def run_pipeline(
     files = _discover_files(path, config.suppress)
 
     def _iter() -> Iterator[tuple[Artifact, MetricValue]]:
+        # Lazy import: analyze/__init__.py imports this module at load, so a
+        # module-level import would form analyze → pipeline → analyze.
+        # NOTE: kept inside _iter (not at run_pipeline top) so tests that
+        # monkeypatch analyze.METRICS_REGISTRY see the patched value — do not
+        # "clean up" to a top-level import without providing another test seam.
+        from savviety_instinct.analyze import METRICS_REGISTRY
+
         for source_path in files:
             result = PYTHON_ADAPTER.parse_path(source_path)
             if not result.ok:
@@ -78,18 +71,42 @@ def run_pipeline(
                 continue
             summary.files_parsed += 1
             ctx = AnalysisContext(parse_result=result)
+
+            # Slice 4b: build MODULE artifact for this file.
+            module_artifact = Artifact(
+                ast_hash=_module_ast_hash(result.functions),
+                language=Language.PYTHON,
+                kind=ArtifactKind.MODULE,
+                name=str(source_path),
+                enclosing_scope=None,
+                source_range=SourceRange(
+                    file_path=str(source_path),
+                    line_start=1,
+                    line_end=max(result.line_count, 1),
+                ),
+            )
+
+            # Build FUNCTION artifacts.
+            function_artifacts: list[Artifact] = []
             for fn in result.functions:
                 summary.functions_analyzed += 1
-                artifact = Artifact(
-                    ast_hash=fn.ast_hash,
-                    language=Language.PYTHON,
-                    kind=ArtifactKind.FUNCTION,
-                    name=fn.name,
-                    enclosing_scope=fn.enclosing_class,
-                    source_range=fn.source_range,
+                function_artifacts.append(
+                    Artifact(
+                        ast_hash=fn.ast_hash,
+                        language=Language.PYTHON,
+                        kind=ArtifactKind.FUNCTION,
+                        name=fn.name,
+                        enclosing_scope=fn.enclosing_class,
+                        source_range=fn.source_range,
+                    )
                 )
-                for metric in _METRICS:
-                    yield artifact, metric.compute(artifact, ctx)
+
+            # Dispatch: module first for deterministic ordering, then functions.
+            # Apply applies_to filter so each metric only fires on its intended kinds.
+            for artifact in [module_artifact, *function_artifacts]:
+                for metric in METRICS_REGISTRY:
+                    if artifact.kind in metric.applies_to:
+                        yield artifact, metric.compute(artifact, ctx)
 
     return _iter(), summary
 
@@ -111,3 +128,18 @@ def _discover_files(path: Path, suppress: list[str]) -> list[Path]:
 def _is_suppressed(path: Path, patterns: list[str]) -> bool:
     s = str(path)
     return any(fnmatch.fnmatch(s, pat) for pat in patterns)
+
+
+def _module_ast_hash(functions: tuple[FunctionDefNode, ...]) -> str:
+    """Shape-invariant hash for a module artifact.
+
+    Defined as hash_ast_sexp(joined function ast_hashes). Changes when a
+    function is added, removed, or structurally modified; invariant across
+    identifier/literal renames (per-function ast_hash is already invariant).
+
+    Modules with zero functions get a stable hash of the empty joined string;
+    consistent across empty modules. Uses hash_ast_sexp so the backend
+    (blake3 / xxhash) is consistent with per-function ast_hash from Slice 2.
+    """
+    joined = "|".join(fn.ast_hash for fn in functions)
+    return hash_ast_sexp(joined)

@@ -23,6 +23,27 @@ class ParseErrorKind(StrEnum):
     IO = "io"
 
 
+class DelegationKind(StrEnum):
+    """Classification of a function body as a trivial wrapper (Slice 4b).
+
+    Consumed by analyze.metrics.trivial_delegation_ratio. Tight R1 semantics;
+    widening happens via coordinated metric_version bump.
+
+    NONE: real-work function, or any body that doesn't match a pattern below.
+    RETURN_PASSTHROUGH: body is `return f(args)` where every positional arg is
+        a parameter reference in declaration order and every keyword arg is
+        `name=name`.
+    ASSIGN_DELEGATE: body is `x = f(args); return x` with the same argument rules.
+    WRAPPER_NO_TRANSFORM: body is a bare call expression statement (no return,
+        no assign) like `f(args)`.
+    """
+
+    NONE = "none"
+    RETURN_PASSTHROUGH = "return_passthrough"
+    ASSIGN_DELEGATE = "assign_delegate"
+    WRAPPER_NO_TRANSFORM = "wrapper_no_transform"
+
+
 class ControlFlowNodeKind(StrEnum):
     """Domain-neutral control-flow constructs.
 
@@ -94,6 +115,10 @@ class FunctionDefNode:
     # nested function_definition / class_definition / lambda (those belong
     # to the nested scope).
     identifier_names: tuple[str, ...] = ()
+    # Slice 4b: triviality classification for trivial_delegation_ratio metric.
+    # Defaults to NONE so existing Slice 3/4a tests that construct
+    # FunctionDefNode directly don't need to pass this field.
+    delegation_kind: DelegationKind = DelegationKind.NONE
 
     @property
     def is_method(self) -> bool:
@@ -128,6 +153,10 @@ class ParseResult:
     classes: tuple[ClassDefNode, ...]
     call_sites: tuple[CallSiteNode, ...]
     errors: tuple[ParseError, ...] = field(default=())
+    # Slice 4b: line count of the parsed source, 1-indexed (last line number).
+    # Populated from tree-sitter's root_node.end_point[0] + 1. Used by the
+    # pipeline to build MODULE artifact source_ranges without re-reading the file.
+    line_count: int = 0
 
     @property
     def ok(self) -> bool:
