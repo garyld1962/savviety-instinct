@@ -79,6 +79,19 @@ def test_at_threshold_medium_confidence() -> None:
     assert value.value == pytest.approx(10 / 21, abs=1e-6)
 
 
+def test_at_min_sample_boundary_is_medium() -> None:
+    """at_min_sample.py has exactly 20 functions — pins `n < MIN_SAMPLE_SIZE` strict.
+
+    A mis-flip to `n <= MIN_SAMPLE_SIZE` would downgrade this to LOW. The
+    MEDIUM assertion + absent "below min" note locks the comparison operator.
+    """
+    artifact, ctx = _module_artifact_and_ctx(MODULES / "at_min_sample.py")
+    value = TRIVIAL_DELEGATION_RATIO_METRIC.compute(artifact, ctx)
+    assert value.confidence == Confidence.MEDIUM
+    assert value.value == pytest.approx(10 / 20, abs=1e-6)
+    assert value.notes == "n=20"
+
+
 def test_large_sample_medium_confidence() -> None:
     """large_sample.py has 32 functions — MEDIUM confidence (≥20)."""
     artifact, ctx = _module_artifact_and_ctx(MODULES / "large_sample.py")
