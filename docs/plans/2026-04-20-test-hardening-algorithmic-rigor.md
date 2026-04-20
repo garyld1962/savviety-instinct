@@ -121,6 +121,47 @@ candidates for follow-up slices.
 
 ---
 
+## Mutation Baseline (attempted — deferred)
+
+Per Scope Decision #4, a one-off mutation-testing run on
+`src/savviety_instinct/analyze/metrics/` was attempted 2026-04-20 with
+`mutmut` 3.5.0 invoked via `uv run --with mutmut mutmut run`. It failed
+to collect baseline stats:
+
+```
+ImportError while importing test module
+  '/home/gary/repos/instinct/mutants/tests/integration/test_parse_graph_pipeline.py'
+E   ModuleNotFoundError: No module named 'savviety_instinct.core'
+```
+
+Root cause: mutmut 3.x clones source + tests into a shadow directory
+(`mutants/`) and runs pytest from there. Our src-layout project has
+`savviety_instinct` installed editable via hatch pointing at the real
+`src/` — from inside `mutants/`, neither the shadowed `mutants/src/`
+nor the real installed package resolves cleanly. Adding
+`pythonpath = ["src"]` to pytest config did not fix it (the shadow
+dir's relative `src/` also contains the mutated package — we'd test
+against wrong sources).
+
+Attempted fix landed pyproject.toml changes that were reverted:
+- `[tool.mutmut]` config entry
+- `pythonpath = ["src"]` in `[tool.pytest.ini_options]`
+
+Deferred rather than forced. Options for future work:
+
+1. **mutatest** — pure-Python alternative, runs in-place without
+   shadow directories. May sidestep the src-layout issue.
+2. **cosmic-ray** — older but mature, supports config-file-driven runs
+   from the real project root.
+3. **Install mutmut 2.x** — older version (pre-rewrite) had flag-based
+   `--paths-to-mutate` + `--runner` options that might cope with our
+   layout. Tradeoff: older tool, likely unmaintained.
+
+Whichever path: run on `src/savviety_instinct/analyze/metrics/` only,
+appendix the score here, no CI wiring (per scope decision).
+
+---
+
 ## Risk
 
 | Risk | Mitigation |
