@@ -115,8 +115,9 @@ candidates for follow-up slices.
 
 | # | Surfaced in | Summary | Severity |
 |---|-------------|---------|----------|
-| B1 | Task 2 — `match_statement.py` | `match_statement` / `case_clause` absent from `_STATEMENT_NODE_TYPES` and `_TS_TO_CFN_KIND`. Match-only bodies yield `statement_count=0`. Breaks `median_function_length`, `function_length_bimodality`, `trivial_delegation_ratio` for any 3.10+ module using match. | Medium — wrong-data silently |
+| B1 | Task 2 — `match_statement.py` | `match_statement` / `case_clause` absent from `_STATEMENT_NODE_TYPES` and `_TS_TO_CFN_KIND`. Match-only bodies yield `statement_count=0` and `cyclomatic=1` regardless of case count. Breaks `median_function_length`, `function_length_bimodality`, `trivial_delegation_ratio`, AND `cyclomatic_complexity` / `cognitive_complexity` for any 3.10+ module using match. Scope widened by Task 4 differential — radon correctly counts each case arm. | High — wrong values silently, wider than first thought |
 | B2 | Task 2 — `decorator_stack.py` | `qualified_name` uniqueness violated — `@property` getter and `@setter` share `"Thing.name"`. Consumers keyed by qualified_name collapse them. | Medium — latent data-integrity |
+| B3 | Task 4 — `exception_groups.py` | `except_group` (PEP 654 `except*`) absent from `_TS_TO_CFN_KIND`. Not counted as a decision — `handle_many` with 2 `except*` arms scores cyclomatic=1. radon has the same blind spot, so both tools agree at the wrong value (not detected by the differential test). | Low — rare construct, but silent |
 
 ---
 
