@@ -52,13 +52,13 @@ Full rationale in spec §9. Short form:
 | `src/savviety_instinct/analyze/metrics/function_length_bimodality.py` | `FUNCTION_LENGTH_BIMODALITY_METRIC` + `_bimodality_coefficient` |
 | `src/savviety_instinct/analyze/pipeline.py` | Import `METRICS_REGISTRY`, delete `_METRICS`; emit MODULE artifact per file; apply `applies_to` filter |
 | `tests/_helpers.py` | Shared `expected_row_count(n_fns, n_modules)` helper |
-| `tests/fixtures/python/modules/trivial_facade.py` | 6 fns, 5 trivial delegates |
+| `tests/fixtures/python/modules/trivial_facade.py` | 7 fns (6 delegates + 1 helper); 5 trivial delegates |
 | `tests/fixtures/python/modules/real_work.py` | 5 fns, zero delegates, varied lengths |
 | `tests/fixtures/python/modules/bimodal.py` | 8 fns: 5× short + 3× long |
 | `tests/fixtures/python/modules/uniform.py` | 10 fns × 10 stmts (degenerate bimodality) |
 | `tests/fixtures/python/modules/empty.py` | 0 fns |
 | `tests/fixtures/python/modules/single.py` | 1 fn (sub-threshold for bimodality) |
-| `tests/fixtures/python/modules/at_threshold.py` | exactly 20 fns (10 trivial, 10 real-work) |
+| `tests/fixtures/python/modules/at_threshold.py` | 21 fns (10 trivial, 10 real-work, 1 helper) |
 | `tests/fixtures/python/modules/large_sample.py` | 30+ fns (HIGH-tier bimodality) |
 | `tests/test_parse_delegation_kind.py` | Parse-layer detection tests |
 | `tests/test_analyze_metric_trivial_delegation_ratio.py` | Metric unit tests |
