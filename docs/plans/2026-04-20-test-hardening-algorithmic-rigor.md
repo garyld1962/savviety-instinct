@@ -107,6 +107,19 @@ Each task commits independently. Each commit green.
 
 ---
 
+## Bugs Surfaced by This Plan
+
+Running log — populated as tasks execute. Each entry cites the fixture/test
+that surfaced it. No commitment in this plan to fix; captured so they become
+candidates for follow-up slices.
+
+| # | Surfaced in | Summary | Severity |
+|---|-------------|---------|----------|
+| B1 | Task 2 — `match_statement.py` | `match_statement` / `case_clause` absent from `_STATEMENT_NODE_TYPES` and `_TS_TO_CFN_KIND`. Match-only bodies yield `statement_count=0`. Breaks `median_function_length`, `function_length_bimodality`, `trivial_delegation_ratio` for any 3.10+ module using match. | Medium — wrong-data silently |
+| B2 | Task 2 — `decorator_stack.py` | `qualified_name` uniqueness violated — `@property` getter and `@setter` share `"Thing.name"`. Consumers keyed by qualified_name collapse them. | Medium — latent data-integrity |
+
+---
+
 ## Risk
 
 | Risk | Mitigation |
