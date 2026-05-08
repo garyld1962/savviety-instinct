@@ -35,3 +35,6 @@ CLAUDE.local.md
 .claude/SESSION.md
 .claude/journal/*.md
 .claude/journal/.lock.*
+
+# Session-start hook backups
+.claude.bak-*/
