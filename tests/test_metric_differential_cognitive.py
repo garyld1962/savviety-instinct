@@ -13,12 +13,11 @@ Reference philosophy differs from ours on three points:
   2. Async constructs — reference: not counted. Instinct: +1 per async
      for/with, same as the sync equivalents (ours appears more correct
      per SonarSource's intent; reference simply ignores async nodes).
-  3. `except*` — reference: +1 per clause. Instinct: not counted (Bug B3).
-
-Match statements (PEP 634) are undercounted by BOTH — reference silently
-ignores `Match` / `match_case` AST nodes. Appears as agreement at 0.
-(This mirrors Bug B1 on the instinct side; on ref it's also a blind
-spot.) Documented but untestable as a delta.
+  3. `except*` — Bug B3 fixed: instinct now counts +1 per clause, matching
+     the reference. handle_many moved into agreement_cases.
+  4. `match` — instinct counts +1 per case arm (Bug B1 fix); reference
+     silently ignores `Match` / `match_case` AST nodes. Documented as
+     a delta below.
 
 Structure mirrors test_metric_differential_cyclomatic.py:
   - `test_cognitive_matches_reference` — parametrize over agreement cases
@@ -101,17 +100,16 @@ AGREEMENT_CASES: list[tuple[str, str | None, str]] = [
     ("adversarial/decorator_stack.py", None, "cached_helper"),
     # Thing.name methods excluded due to Bug B2 qualified_name collision
     ("adversarial/decorator_stack.py", "Thing", "from_id"),
-    # exception_groups.py
+    # exception_groups.py — both correctly count except* arms (B3 fix)
     ("adversarial/exception_groups.py", None, "run_all"),
+    ("adversarial/exception_groups.py", None, "handle_many"),
     # generics_pep695.py
     ("adversarial/generics_pep695.py", None, "identity"),
     ("adversarial/generics_pep695.py", None, "head"),
     ("adversarial/generics_pep695.py", "Container", "__init__"),
     ("adversarial/generics_pep695.py", "Container", "get"),
-    # match_statement.py — BOTH blind to match (Bug B1 + reference blind spot);
-    # agree at 0 though truth is > 0. Documented in module docstring.
-    ("adversarial/match_statement.py", None, "classify_shape"),
-    ("adversarial/match_statement.py", None, "unpack_point"),
+    # match_statement.py — instinct counts +1 per case (B1 fix); reference
+    # ignores match. See DELTA_CASES below.
     # nested_functions.py outer only
     ("adversarial/nested_functions.py", None, "make_counter"),
     ("adversarial/nested_functions.py", None, "make_types"),
@@ -165,12 +163,22 @@ DELTA_CASES: list[tuple[str, str | None, str, int, int, str]] = [
         "Philosophy split: async for / async with ignored by reference",
     ),
     (
-        "adversarial/exception_groups.py",
+        "adversarial/match_statement.py",
         None,
-        "handle_many",
+        "classify_shape",
+        3,
         0,
-        2,
-        "Bug B3: instinct doesn't count except* clauses; reference correctly does (+1 each)",
+        "B1 fix: instinct counts +1 per case arm (3 arms → 3); cognitive_complexity "
+        "package is blind to match",
+    ),
+    (
+        "adversarial/match_statement.py",
+        None,
+        "unpack_point",
+        3,
+        0,
+        "B1 fix: instinct counts +1 per case arm (3 arms → 3); cognitive_complexity "
+        "package is blind to match",
     ),
     (
         "adversarial/multi_clause_comp.py",

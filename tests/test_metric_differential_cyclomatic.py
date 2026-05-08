@@ -15,15 +15,17 @@ Two test functions:
    small set of cases where we deliberately diverge. Two reasons apply:
      - Known Gap #2 in cyclomatic.py: comprehensions counted +1 per
        group; radon counts +1 per for/if clause.
-     - Bug B1 (surfaced 2026-04-20 via match_statement.py fixture):
-       match_statement / case_clause missing from our CFN map —
-       radon correctly counts each case arm; we ignore them entirely.
+     - Bug B1 fix (parse-bugs branch): we now count every case_clause
+       as +1; radon skips a trailing bare `case _:` as the default arm.
+       For fixtures without a trailing wildcard the values agree.
 
-Decorator-stack getter/setter methods are excluded because Bug B2
-(qualified_name collision for `Thing.name`) makes dict-keyed lookup
-ambiguous. Exception-group (`except*`) handling is currently wrong in
-BOTH tools symmetrically — they agree on a wrong value, so they appear
-in the agreement list rather than as a delta.
+Decorator-stack getter/setter methods are excluded because the differential
+test keys by (class, name); B2's fix gives our qualified_name unique
+suffixes but the radon side has no equivalent disambiguator, so the
+two methods would still collide in the lookup dict. Out of scope here.
+
+Exception groups (`except*`): instinct counts each clause +1 (Bug B3
+fix); radon is still blind to PEP 654 — moved to documented deltas.
 """
 
 from __future__ import annotations
@@ -95,9 +97,12 @@ AGREEMENT_CASES: list[tuple[str, str | None, str]] = [
     # adversarial/decorator_stack.py — module-scope function only
     # (methods excluded due to Bug B2 qualified_name collision)
     ("adversarial/decorator_stack.py", None, "cached_helper"),
-    # adversarial/exception_groups.py — both tools blind to except*, agree at 1
+    # adversarial/exception_groups.py — run_all has no except*, agrees.
+    # handle_many is a documented delta below (B3 fix vs radon blind spot).
     ("adversarial/exception_groups.py", None, "run_all"),
-    ("adversarial/exception_groups.py", None, "handle_many"),
+    # adversarial/match_statement.py — unpack_point has 3 non-wildcard cases;
+    # classify_shape ends in bare `case _:` so radon discounts it (delta below).
+    ("adversarial/match_statement.py", None, "unpack_point"),
     # adversarial/generics_pep695.py
     ("adversarial/generics_pep695.py", None, "identity"),
     ("adversarial/generics_pep695.py", None, "head"),
@@ -146,17 +151,19 @@ DELTA_CASES: list[tuple[str, str | None, str, int, int, str]] = [
         "adversarial/match_statement.py",
         None,
         "classify_shape",
-        1,
+        4,
         3,
-        "Bug B1: match_statement absent from CFN map — we undercount match arms",
+        "B1 fix: instinct counts every case_clause +1 (3 arms → 4); radon "
+        "skips the trailing bare `case _:` as the default arm",
     ),
     (
-        "adversarial/match_statement.py",
+        "adversarial/exception_groups.py",
         None,
-        "unpack_point",
+        "handle_many",
+        3,
         1,
-        4,
-        "Bug B1",
+        "B3 fix: instinct counts each except* clause +1 (2 arms → 3); "
+        "radon is blind to PEP 654 except_group_clause",
     ),
     (
         "adversarial/multi_clause_comp.py",

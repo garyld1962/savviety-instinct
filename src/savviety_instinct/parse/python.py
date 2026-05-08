@@ -46,6 +46,9 @@ _TS_TO_CFN_KIND: dict[str, ControlFlowNodeKind] = {
     "while_statement": ControlFlowNodeKind.WHILE,
     "try_statement": ControlFlowNodeKind.TRY,
     "except_clause": ControlFlowNodeKind.EXCEPT,
+    "except_group_clause": ControlFlowNodeKind.EXCEPT,
+    "match_statement": ControlFlowNodeKind.MATCH,
+    "case_clause": ControlFlowNodeKind.CASE,
     "conditional_expression": ControlFlowNodeKind.TERNARY,
 }
 
@@ -70,6 +73,8 @@ _STATEMENT_NODE_TYPES: frozenset[str] = frozenset(
         "while_statement",
         "try_statement",
         "except_clause",
+        "except_group_clause",
+        "match_statement",
         "with_statement",
         "return_statement",
         "raise_statement",
@@ -199,8 +204,9 @@ def _block_of(node: Node) -> Node | None:
     """
     if node.type in ("if_statement", "elif_clause"):
         return node.child_by_field_name("consequence")
-    if node.type == "except_clause":
-        # except_clause has no named field for its block; find by type
+    if node.type in ("except_clause", "except_group_clause"):
+        # Neither has a named field for its block; find by type. PEP 654's
+        # except* (except_group_clause) shares this layout with except_clause.
         for child in node.children:
             if child.type == "block":
                 return child
@@ -277,9 +283,12 @@ def _collect_cfns_rec(node: Node, file_path: str, depth: int, out: list[ControlF
                     children=tuple(children_cfns),
                 )
             )
-            # except clauses: emit as siblings at same depth
+            # except clauses: emit as siblings at same depth.
+            # except_group_clause (PEP 654 `except*`) is treated identically
+            # to except_clause for cognitive/cyclomatic purposes — each arm
+            # is a +1 decision regardless of group vs single.
             for child in node.children:
-                if child.type == "except_clause":
+                if child.type in ("except_clause", "except_group_clause"):
                     exc_block = _block_of(child)
                     exc_children: list[ControlFlowNode] = []
                     if exc_block is not None:
@@ -292,6 +301,38 @@ def _collect_cfns_rec(node: Node, file_path: str, depth: int, out: list[ControlF
                             children=tuple(exc_children),
                         )
                     )
+            return
+
+        if kind == ControlFlowNodeKind.MATCH:
+            # MATCH is emitted as a marker with no children. Each case_clause
+            # becomes a sibling CASE at the same depth (parallel to TRY/EXCEPT
+            # siblings), and its body's CFNs hang off the CASE at depth+1.
+            out.append(
+                ControlFlowNode(
+                    kind=ControlFlowNodeKind.MATCH,
+                    source_range=_source_range(node, file_path),
+                    nesting_depth=depth,
+                    children=(),
+                )
+            )
+            match_body = node.child_by_field_name("body")
+            if match_body is not None:
+                for child in match_body.children:
+                    if child.type == "case_clause":
+                        # tree-sitter-python uses field name "consequence"
+                        # for the case body block.
+                        case_block = child.child_by_field_name("consequence")
+                        case_children: list[ControlFlowNode] = []
+                        if case_block is not None:
+                            _collect_cfns_into(case_block, file_path, depth + 1, case_children)
+                        out.append(
+                            ControlFlowNode(
+                                kind=ControlFlowNodeKind.CASE,
+                                source_range=_source_range(child, file_path),
+                                nesting_depth=depth,
+                                children=tuple(case_children),
+                            )
+                        )
             return
 
         # General case: leaf CFNs (boolean, ternary, comprehension) have no body
@@ -374,6 +415,16 @@ def _count_statements(body_node: Node) -> int:
     stack: list[Node] = list(body_node.children)
     while stack:
         node = stack.pop()
+        if node.type == "case_clause":
+            # case_clause is a structural child of match_statement, not a
+            # statement in its own right. Recurse into its body so the
+            # contained statements are counted, without bumping the count
+            # for the case_clause itself. Tree-sitter-python uses the
+            # field name "consequence" for the case body block.
+            case_body = node.child_by_field_name("consequence")
+            if case_body is not None:
+                stack.extend(case_body.children)
+            continue
         if node.type in _STATEMENT_NODE_TYPES:
             if _is_docstring_node(node):
                 continue
@@ -381,21 +432,22 @@ def _count_statements(body_node: Node) -> int:
             # Recurse into compound statements' bodies (if/elif use "consequence")
             if node.type in ("if_statement", "elif_clause"):
                 block = node.child_by_field_name("consequence")
-            elif node.type == "except_clause":
+            elif node.type in ("except_clause", "except_group_clause"):
                 block = _block_of(node)
             else:
                 block = node.child_by_field_name("body")
             if block is not None:
                 stack.extend(block.children)
-            # Alternative/supplemental branches: elif, else, finally.
-            # except_clause is now in _STATEMENT_NODE_TYPES; push the node
-            # itself so it is counted and its body recursed in the normal path.
+            # Alternative/supplemental branches: elif, else, finally, except*.
+            # except_clause / except_group_clause are in _STATEMENT_NODE_TYPES;
+            # push the node itself so it is counted and its body recursed in
+            # the normal path.
             for child in node.children:
                 if child.type in ("elif_clause", "else_clause", "finally_clause"):
                     alt_block = _block_of(child)
                     if alt_block is not None:
                         stack.extend(alt_block.children)
-                elif child.type == "except_clause":
+                elif child.type in ("except_clause", "except_group_clause"):
                     stack.append(child)
     return count
 
@@ -612,10 +664,39 @@ def _collect_syntax_errors(tree: Tree, source: bytes, file_path: str) -> list[Pa
     return errors
 
 
+def _decorator_qname_suffix(fn_node: Node, source: bytes) -> str:
+    """Disambiguator suffix for property/setter/deleter decorators.
+
+    Returns "[getter]", "[setter]", "[deleter]", or "" — used to make
+    qualified_name unique when a class has multiple methods sharing the
+    same name (e.g. a `@property` getter alongside a `@<name>.setter`).
+    First matching decorator wins; non-property decorators are ignored.
+    """
+    parent = fn_node.parent
+    if parent is None or parent.type != "decorated_definition":
+        return ""
+    for child in parent.children:
+        if child.type != "decorator":
+            continue
+        for inner in child.children:
+            if inner.type == "identifier" and _text(inner, source) == "property":
+                return "[getter]"
+            if inner.type == "attribute":
+                idents = [c for c in inner.children if c.type == "identifier"]
+                if idents:
+                    last = _text(idents[-1], source)
+                    if last == "setter":
+                        return "[setter]"
+                    if last == "deleter":
+                        return "[deleter]"
+    return ""
+
+
 def _collect_functions(
     tree: Tree, source: bytes, file_path: str
 ) -> list[tuple[FunctionDefNode, Node]]:
     out: list[tuple[FunctionDefNode, Node]] = []
+    seen_qnames: set[str] = set()
     stack: list[tuple[Node, str | None]] = [(tree.root_node, None)]
     while stack:
         node, enclosing_class = stack.pop()
@@ -624,7 +705,14 @@ def _collect_functions(
             if name_node is None:
                 continue
             name = _text(name_node, source)
-            qualified = f"{enclosing_class}.{name}" if enclosing_class else name
+            base_qname = f"{enclosing_class}.{name}" if enclosing_class else name
+            qualified = base_qname + _decorator_qname_suffix(node, source)
+            if qualified in seen_qnames:
+                # Fallback for non-property duplicates: append a line
+                # suffix. First occurrence keeps the bare name; later
+                # duplicates carry the line number.
+                qualified = f"{qualified}@L{node.start_point[0] + 1}"
+            seen_qnames.add(qualified)
             params = _extract_parameter_names(node, source)
             body_node = node.child_by_field_name("body")
             control_flow = (

@@ -4,17 +4,17 @@ Stacked function decorators (@cache + @staticmethod at module scope,
 @classmethod + @lru_cache on a method), plus a property/setter pair
 that both carry the name `name`.
 
-KNOWN BUG (discovered 2026-04-20 via this fixture):
-  qualified_name uniqueness violated — getter and setter both produce
-  "Thing.name". Any consumer keyed by qualified_name (metric dedup,
-  `_artifact_for` in tests, future SQL storage) will collapse the two.
-  Follow-up: disambiguate (e.g., "Thing.name[getter]" / "Thing.name[setter]"
-  or append line number).
+Bug B2 (fixed in parse-bugs branch):
+  Originally `@property` getter and `@<name>.setter` both produced
+  qualified_name "Thing.name", collapsing the two for any consumer
+  keyed by qualified_name. The fix detects the property-family
+  decorator and appends "[getter]" / "[setter]" / "[deleter]" to
+  qualified_name. Other duplicates fall back to "@L<line>".
 
-Expected (correct behavior, xfail until fixed):
-  functions: 4 — cached_helper, Thing.name (getter), Thing.name (setter), Thing.from_id
+Expected (post-fix):
+  functions: 4 — cached_helper, Thing.name[getter], Thing.name[setter], Thing.from_id
   classes: 1 (Thing)
-  distinct qualified_names: 4 (currently 3 — name collides)
+  distinct qualified_names: 4
   all delegation_kind: NONE (no pure passthroughs)
 """
 from __future__ import annotations

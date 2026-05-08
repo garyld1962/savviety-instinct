@@ -25,6 +25,8 @@ increments:
   while: {base: 1, increments_nesting: true}
   try: {base: 0, increments_nesting: true}     # try wrapper is zero-cost but nests its except clauses
   except: {base: 1, increments_nesting: false}
+  match: {base: 0, increments_nesting: false}  # match itself is a marker — case arms are emitted as siblings
+  case: {base: 1, increments_nesting: false}   # each case arm is a chain continuation, like elif
   ternary: {base: 1, increments_nesting: false}
   boolean_sequence: {base: 1, increments_nesting: false}
   comprehension: {base: 1, increments_nesting: false}

@@ -39,6 +39,7 @@ _DECISION_KINDS: frozenset[ControlFlowNodeKind] = frozenset(
         ControlFlowNodeKind.FOR,
         ControlFlowNodeKind.WHILE,
         ControlFlowNodeKind.EXCEPT,
+        ControlFlowNodeKind.CASE,  # 1.1.0: each match case arm is a decision (Bug B1 fix)
         ControlFlowNodeKind.TERNARY,
         ControlFlowNodeKind.BOOLEAN_SEQUENCE,  # +1 per group — see module docstring
         ControlFlowNodeKind.COMPREHENSION,  # +1 per comprehension — see module docstring
@@ -57,7 +58,7 @@ def _count_decisions(nodes: tuple[ControlFlowNode, ...]) -> int:
 
 class CyclomaticMetric:
     id: str = "cyclomatic_complexity"
-    version: str = "1.0.0"
+    version: str = "1.2.0"
     applies_to: frozenset[ArtifactKind] = frozenset({ArtifactKind.FUNCTION})
     required_inputs: frozenset[InputKind] = frozenset({InputKind.AST})
 

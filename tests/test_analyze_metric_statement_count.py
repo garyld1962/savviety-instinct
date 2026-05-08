@@ -68,7 +68,7 @@ def test_statement_count_matches_fixture_annotation(
 
 def test_statement_count_metric_metadata() -> None:
     assert STATEMENT_COUNT_METRIC.id == "statement_count"
-    assert STATEMENT_COUNT_METRIC.version == "1.0.0"
+    assert STATEMENT_COUNT_METRIC.version == "1.2.0"
     assert STATEMENT_COUNT_METRIC.applies_to == frozenset({ArtifactKind.FUNCTION})
     assert STATEMENT_COUNT_METRIC.required_inputs == frozenset({InputKind.AST})
 
