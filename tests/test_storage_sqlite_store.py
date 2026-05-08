@@ -1,15 +1,26 @@
-"""Tests for SQLAlchemyObservationStore — Slice 5 task 2 surface
-(constructor schema upgrade, begin_run, complete_run)."""
+"""Tests for SQLAlchemyObservationStore — covers Slice 5 tasks 2 and 3:
+constructor schema upgrade, run lifecycle, artifact upsert with dedup,
+stability-tier transitions, and observation recording."""
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 from sqlalchemy import create_engine, inspect, text
 
+from savviety_instinct.core.types import (
+    Artifact,
+    ArtifactKind,
+    Confidence,
+    Language,
+    MetricValue,
+    SourceRange,
+)
 from savviety_instinct.storage.interfaces import (
+    FileLocation,
     RepoFingerprintSource,
     RunMeta,
     RunStatus,
@@ -205,20 +216,233 @@ def test_complete_run_idempotent(tmp_path: Path) -> None:
     assert status == RunStatus.FAILED.value
 
 
-# ---------- not-yet-implemented stubs ----------
+# ---------- upsert_artifact ----------
 
 
-def test_upsert_artifact_raises_not_implemented(tmp_path: Path) -> None:
-    """Stub keeps the Protocol shape; task 3 fills it in."""
+def _artifact(ast_hash: str = "ah_alpha", **overrides: object) -> Artifact:
+    base = {
+        "ast_hash": ast_hash,
+        "language": Language.PYTHON,
+        "kind": ArtifactKind.FUNCTION,
+        "name": "f",
+        "enclosing_scope": None,
+        "source_range": SourceRange(file_path="x.py", line_start=1, line_end=10),
+    }
+    base.update(overrides)
+    return Artifact(**base)  # type: ignore[arg-type]
+
+
+def _metric(metric_id: str = "cyclomatic_complexity", value: float | int = 3) -> MetricValue:
+    return MetricValue(
+        metric_id=metric_id,
+        value=value,
+        metric_version="1.2.0",
+        confidence=Confidence.HIGH,
+    )
+
+
+def _location(**overrides: object) -> FileLocation:
+    base = {
+        "file_path": "src/foo.py",
+        "line_start": 1,
+        "line_end": 10,
+        "symbol_name": "f",
+        "enclosing_scope": None,
+        "context_hash": "ctx_" + "a" * 60,
+    }
+    base.update(overrides)
+    return FileLocation(**base)  # type: ignore[arg-type]
+
+
+def test_upsert_artifact_insert_returns_id_and_creates_row(tmp_path: Path) -> None:
     store = SQLAlchemyObservationStore(tmp_path / "instinct.db")
-    with pytest.raises(NotImplementedError, match="task 3"):
-        store.upsert_artifact(None, [])  # type: ignore[arg-type]
+    run_id = store.begin_run(_meta())
+
+    artifact_id = store.upsert_artifact(run_id, _artifact(), [_metric()])
+    assert isinstance(artifact_id, int)
+    assert artifact_id > 0
+
+    with store._engine.connect() as conn:
+        row = conn.execute(
+            text(
+                "SELECT ast_hash, language, artifact_kind, occurrence_count, "
+                "stability_tier, first_seen_run_id, last_seen_run_id "
+                "FROM observation_artifacts WHERE id = :id"
+            ),
+            {"id": artifact_id},
+        ).fetchone()
+    assert row == ("ah_alpha", "python", "function", 1, "volatile", run_id, run_id)
 
 
-def test_record_observation_raises_not_implemented(tmp_path: Path) -> None:
+def test_upsert_artifact_persists_metrics_json(tmp_path: Path) -> None:
     store = SQLAlchemyObservationStore(tmp_path / "instinct.db")
-    with pytest.raises(NotImplementedError, match="task 3"):
-        store.record_observation(1, 1, None)  # type: ignore[arg-type]
+    run_id = store.begin_run(_meta())
+
+    artifact_id = store.upsert_artifact(
+        run_id,
+        _artifact(),
+        [
+            _metric("cyclomatic_complexity", 4),
+            _metric("cognitive_complexity", 2),
+        ],
+    )
+
+    with store._engine.connect() as conn:
+        raw = conn.execute(
+            text("SELECT metrics_json FROM observation_artifacts WHERE id = :id"),
+            {"id": artifact_id},
+        ).scalar_one()
+    parsed = json.loads(raw)
+    assert parsed["cyclomatic_complexity"]["value"] == 4
+    assert parsed["cyclomatic_complexity"]["confidence"] == "high"
+    assert parsed["cognitive_complexity"]["value"] == 2
+
+
+def test_upsert_artifact_dedupes_on_repeat_within_same_run(tmp_path: Path) -> None:
+    """Calling upsert twice with the same ast_hash returns the same id
+    and increments occurrence_count."""
+    store = SQLAlchemyObservationStore(tmp_path / "instinct.db")
+    run_id = store.begin_run(_meta())
+
+    a = store.upsert_artifact(run_id, _artifact(), [_metric()])
+    b = store.upsert_artifact(run_id, _artifact(), [_metric()])
+    assert a == b
+
+    with store._engine.connect() as conn:
+        count = conn.execute(
+            text("SELECT occurrence_count FROM observation_artifacts WHERE id = :id"),
+            {"id": a},
+        ).scalar_one()
+    assert count == 2
+
+
+def test_upsert_artifact_dedupes_across_runs(tmp_path: Path) -> None:
+    """Same artifact in two consecutive runs reuses the row, bumps
+    last_seen_run_id, and leaves first_seen_run_id stable."""
+    store = SQLAlchemyObservationStore(tmp_path / "instinct.db")
+
+    run_a = store.begin_run(_meta())
+    artifact_id = store.upsert_artifact(run_a, _artifact(), [_metric()])
+    store.complete_run(run_a, RunStatus.COMPLETED)
+
+    run_b = store.begin_run(_meta())
+    same_id = store.upsert_artifact(run_b, _artifact(), [_metric()])
+    assert same_id == artifact_id
+
+    with store._engine.connect() as conn:
+        row = conn.execute(
+            text(
+                "SELECT first_seen_run_id, last_seen_run_id, occurrence_count, "
+                "stability_tier FROM observation_artifacts WHERE id = :id"
+            ),
+            {"id": artifact_id},
+        ).fetchone()
+    assert row == (run_a, run_b, 2, "settled")
+
+
+def test_upsert_artifact_distinct_ast_hashes_get_distinct_rows(tmp_path: Path) -> None:
+    store = SQLAlchemyObservationStore(tmp_path / "instinct.db")
+    run_id = store.begin_run(_meta())
+
+    a = store.upsert_artifact(run_id, _artifact(ast_hash="ah_a"), [_metric()])
+    b = store.upsert_artifact(run_id, _artifact(ast_hash="ah_b"), [_metric()])
+    assert a != b
+
+
+def test_upsert_artifact_metric_version_change_creates_new_row(tmp_path: Path) -> None:
+    """Different combined metric_version → different dedup key →
+    two distinct artifact rows for the same ast_hash. This is the
+    intended invalidation behaviour when a metric is added or bumped."""
+    store = SQLAlchemyObservationStore(tmp_path / "instinct.db")
+
+    meta_v1 = _meta(metric_version="mv_v1aaaaaaaa")
+    run_v1 = store.begin_run(meta_v1)
+    a = store.upsert_artifact(run_v1, _artifact(), [_metric()])
+
+    meta_v2 = _meta(metric_version="mv_v2bbbbbbbb")
+    run_v2 = store.begin_run(meta_v2)
+    b = store.upsert_artifact(run_v2, _artifact(), [_metric()])
+
+    assert a != b
+
+
+def test_upsert_artifact_unknown_run_id_raises(tmp_path: Path) -> None:
+    store = SQLAlchemyObservationStore(tmp_path / "instinct.db")
+    with pytest.raises(LookupError, match="run_id"):
+        store.upsert_artifact(99999, _artifact(), [_metric()])
+
+
+def test_upsert_artifact_repo_fingerprint_inherited_from_run(tmp_path: Path) -> None:
+    """The artifact row's repo_fingerprint comes from the run, not the
+    Artifact instance — keeps cross-repo aggregation in the warehouse
+    correct without requiring callers to thread the value."""
+    store = SQLAlchemyObservationStore(tmp_path / "instinct.db")
+    run_id = store.begin_run(_meta(repo_fingerprint="fp_specific"))
+    artifact_id = store.upsert_artifact(run_id, _artifact(), [_metric()])
+
+    with store._engine.connect() as conn:
+        fp = conn.execute(
+            text("SELECT repo_fingerprint FROM observation_artifacts WHERE id = :id"),
+            {"id": artifact_id},
+        ).scalar_one()
+    assert fp == "fp_specific"
+
+
+# ---------- record_observation ----------
+
+
+def test_record_observation_inserts_row(tmp_path: Path) -> None:
+    store = SQLAlchemyObservationStore(tmp_path / "instinct.db")
+    run_id = store.begin_run(_meta())
+    artifact_id = store.upsert_artifact(run_id, _artifact(), [_metric()])
+
+    store.record_observation(
+        run_id,
+        artifact_id,
+        _location(file_path="src/foo.py", symbol_name="f", line_start=10, line_end=20),
+    )
+
+    with store._engine.connect() as conn:
+        row = conn.execute(
+            text(
+                "SELECT run_id, artifact_id, file_path, line_start, line_end, "
+                "symbol_name, enclosing_scope, context_hash FROM run_observations "
+                "WHERE run_id = :rid AND artifact_id = :aid"
+            ),
+            {"rid": run_id, "aid": artifact_id},
+        ).fetchone()
+    assert row is not None
+    assert row[0] == run_id
+    assert row[1] == artifact_id
+    assert row[2] == "src/foo.py"
+    assert row[3] == 10
+    assert row[4] == 20
+    assert row[5] == "f"
+    assert row[6] is None
+    assert row[7].startswith("ctx_")
+
+
+def test_record_observation_allows_multiple_per_artifact_per_run(tmp_path: Path) -> None:
+    """Same artifact at two different file locations in one run produces
+    two run_observations rows."""
+    store = SQLAlchemyObservationStore(tmp_path / "instinct.db")
+    run_id = store.begin_run(_meta())
+    artifact_id = store.upsert_artifact(run_id, _artifact(), [_metric()])
+
+    store.record_observation(run_id, artifact_id, _location(file_path="a.py"))
+    store.record_observation(run_id, artifact_id, _location(file_path="b.py"))
+
+    with store._engine.connect() as conn:
+        count = conn.execute(
+            text(
+                "SELECT COUNT(*) FROM run_observations WHERE run_id = :rid AND artifact_id = :aid"
+            ),
+            {"rid": run_id, "aid": artifact_id},
+        ).scalar_one()
+    assert count == 2
+
+
+# ---------- not-yet-implemented stubs (Slice 6) ----------
 
 
 def test_write_ranking_raises_not_implemented(tmp_path: Path) -> None:
