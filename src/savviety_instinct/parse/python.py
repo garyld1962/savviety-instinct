@@ -46,6 +46,8 @@ _TS_TO_CFN_KIND: dict[str, ControlFlowNodeKind] = {
     "while_statement": ControlFlowNodeKind.WHILE,
     "try_statement": ControlFlowNodeKind.TRY,
     "except_clause": ControlFlowNodeKind.EXCEPT,
+    "match_statement": ControlFlowNodeKind.MATCH,
+    "case_clause": ControlFlowNodeKind.CASE,
     "conditional_expression": ControlFlowNodeKind.TERNARY,
 }
 
@@ -70,6 +72,7 @@ _STATEMENT_NODE_TYPES: frozenset[str] = frozenset(
         "while_statement",
         "try_statement",
         "except_clause",
+        "match_statement",
         "with_statement",
         "return_statement",
         "raise_statement",
@@ -294,6 +297,38 @@ def _collect_cfns_rec(node: Node, file_path: str, depth: int, out: list[ControlF
                     )
             return
 
+        if kind == ControlFlowNodeKind.MATCH:
+            # MATCH is emitted as a marker with no children. Each case_clause
+            # becomes a sibling CASE at the same depth (parallel to TRY/EXCEPT
+            # siblings), and its body's CFNs hang off the CASE at depth+1.
+            out.append(
+                ControlFlowNode(
+                    kind=ControlFlowNodeKind.MATCH,
+                    source_range=_source_range(node, file_path),
+                    nesting_depth=depth,
+                    children=(),
+                )
+            )
+            match_body = node.child_by_field_name("body")
+            if match_body is not None:
+                for child in match_body.children:
+                    if child.type == "case_clause":
+                        # tree-sitter-python uses field name "consequence"
+                        # for the case body block.
+                        case_block = child.child_by_field_name("consequence")
+                        case_children: list[ControlFlowNode] = []
+                        if case_block is not None:
+                            _collect_cfns_into(case_block, file_path, depth + 1, case_children)
+                        out.append(
+                            ControlFlowNode(
+                                kind=ControlFlowNodeKind.CASE,
+                                source_range=_source_range(child, file_path),
+                                nesting_depth=depth,
+                                children=tuple(case_children),
+                            )
+                        )
+            return
+
         # General case: leaf CFNs (boolean, ternary, comprehension) have no body
         # to recurse into for CFN purposes. Compound CFNs (for, while, else, elif,
         # except) use _block_of to find their body.
@@ -374,6 +409,16 @@ def _count_statements(body_node: Node) -> int:
     stack: list[Node] = list(body_node.children)
     while stack:
         node = stack.pop()
+        if node.type == "case_clause":
+            # case_clause is a structural child of match_statement, not a
+            # statement in its own right. Recurse into its body so the
+            # contained statements are counted, without bumping the count
+            # for the case_clause itself. Tree-sitter-python uses the
+            # field name "consequence" for the case body block.
+            case_body = node.child_by_field_name("consequence")
+            if case_body is not None:
+                stack.extend(case_body.children)
+            continue
         if node.type in _STATEMENT_NODE_TYPES:
             if _is_docstring_node(node):
                 continue

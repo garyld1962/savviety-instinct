@@ -61,7 +61,7 @@ def test_cognitive_matches_fixture(metric_fixtures_result, qualified: str, expec
 
 def test_cognitive_metadata() -> None:
     assert COGNITIVE_METRIC.id == "cognitive_complexity"
-    assert COGNITIVE_METRIC.version == "1.0.0"
+    assert COGNITIVE_METRIC.version == "1.1.0"
     assert COGNITIVE_METRIC.applies_to == frozenset({ArtifactKind.FUNCTION})
     assert COGNITIVE_METRIC.required_inputs == frozenset({InputKind.AST})
 

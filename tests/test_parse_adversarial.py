@@ -53,17 +53,14 @@ def test_match_statement_delegation_kinds_all_none() -> None:
     assert all(f.delegation_kind is DelegationKind.NONE for f in result.functions)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Bug: match_statement / case_clause missing from _STATEMENT_NODE_TYPES "
-        "and _TS_TO_CFN_KIND. Match-only bodies report statement_count=0, "
-        "breaking median/bimodality/trivial-delegation for 3.10+ code. See "
-        "tests/fixtures/python/adversarial/match_statement.py docstring."
-    ),
-)
 def test_match_statement_counts_are_positive() -> None:
-    """Each match-only function has at least one statement (the match itself)."""
+    """Each match-only function has at least one statement.
+
+    Bug B1 fix (parse-bugs branch): match_statement is now a recognised
+    statement node, and case_clause bodies are recursed into for inner
+    statements. classify_shape and unpack_point both report 4 statements
+    (1 match + 3 case body returns).
+    """
     result = _parse("match_statement.py")
     for f in result.functions:
         assert f.statement_count >= 1, f"{f.name}: statement_count={f.statement_count}"

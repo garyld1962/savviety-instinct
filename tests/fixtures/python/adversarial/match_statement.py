@@ -5,18 +5,18 @@ patterns, capture variables, and a guard. Tree-sitter-python parses these
 cleanly, but savviety_instinct.parse.python has no mapping for
 `match_statement` in `_STATEMENT_NODE_TYPES` or `_TS_TO_CFN_KIND`.
 
-KNOWN BUG (discovered 2026-04-20 via this fixture):
-  match-only function bodies yield statement_count=0. This breaks
-  median_function_length, function_length_bimodality, and
-  trivial_delegation_ratio for any Python 3.10+ module using match.
-  Follow-up: add `match_statement` and `case_clause` to the
-  statement-node set and the CFN-kind map. See test for xfail marker.
+Bug B1 (fixed in parse-bugs branch):
+  Originally `match_statement` and `case_clause` were missing from
+  `_STATEMENT_NODE_TYPES` and `_TS_TO_CFN_KIND`, so match-only bodies
+  scored statement_count=0 and cyclomatic=1. The fix added MATCH and
+  CASE ControlFlowNodeKinds and recursive case-body statement counting.
 
-Expected (correct behavior, xfail until fixed):
+Expected (post-fix):
   functions: 2 (classify_shape, unpack_point)
   all delegation_kind: NONE
-  classify_shape.statement_count: ≥ 1 (currently 0)
-  unpack_point.statement_count: ≥ 1 (currently 0)
+  classify_shape: statement_count=4 (1 match + 3 case returns),
+                  cyclomatic=4, cognitive=3
+  unpack_point:   statement_count=4, cyclomatic=4, cognitive=3
 """
 from __future__ import annotations
 

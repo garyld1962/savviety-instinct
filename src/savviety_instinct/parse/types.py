@@ -60,6 +60,8 @@ class ControlFlowNodeKind(StrEnum):
     WHILE = "while"
     TRY = "try"
     EXCEPT = "except"
+    MATCH = "match"
+    CASE = "case"
     TERNARY = "ternary"
     BOOLEAN_SEQUENCE = "boolean_sequence"
     COMPREHENSION = "comprehension"

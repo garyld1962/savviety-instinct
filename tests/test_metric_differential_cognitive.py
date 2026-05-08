@@ -14,11 +14,9 @@ Reference philosophy differs from ours on three points:
      for/with, same as the sync equivalents (ours appears more correct
      per SonarSource's intent; reference simply ignores async nodes).
   3. `except*` — reference: +1 per clause. Instinct: not counted (Bug B3).
-
-Match statements (PEP 634) are undercounted by BOTH — reference silently
-ignores `Match` / `match_case` AST nodes. Appears as agreement at 0.
-(This mirrors Bug B1 on the instinct side; on ref it's also a blind
-spot.) Documented but untestable as a delta.
+  4. `match` — instinct counts +1 per case arm (Bug B1 fix); reference
+     silently ignores `Match` / `match_case` AST nodes. Documented as
+     a delta below.
 
 Structure mirrors test_metric_differential_cyclomatic.py:
   - `test_cognitive_matches_reference` — parametrize over agreement cases
@@ -108,10 +106,8 @@ AGREEMENT_CASES: list[tuple[str, str | None, str]] = [
     ("adversarial/generics_pep695.py", None, "head"),
     ("adversarial/generics_pep695.py", "Container", "__init__"),
     ("adversarial/generics_pep695.py", "Container", "get"),
-    # match_statement.py — BOTH blind to match (Bug B1 + reference blind spot);
-    # agree at 0 though truth is > 0. Documented in module docstring.
-    ("adversarial/match_statement.py", None, "classify_shape"),
-    ("adversarial/match_statement.py", None, "unpack_point"),
+    # match_statement.py — instinct counts +1 per case (B1 fix); reference
+    # ignores match. See DELTA_CASES below.
     # nested_functions.py outer only
     ("adversarial/nested_functions.py", None, "make_counter"),
     ("adversarial/nested_functions.py", None, "make_types"),
@@ -171,6 +167,24 @@ DELTA_CASES: list[tuple[str, str | None, str, int, int, str]] = [
         0,
         2,
         "Bug B3: instinct doesn't count except* clauses; reference correctly does (+1 each)",
+    ),
+    (
+        "adversarial/match_statement.py",
+        None,
+        "classify_shape",
+        3,
+        0,
+        "B1 fix: instinct counts +1 per case arm (3 arms → 3); cognitive_complexity "
+        "package is blind to match",
+    ),
+    (
+        "adversarial/match_statement.py",
+        None,
+        "unpack_point",
+        3,
+        0,
+        "B1 fix: instinct counts +1 per case arm (3 arms → 3); cognitive_complexity "
+        "package is blind to match",
     ),
     (
         "adversarial/multi_clause_comp.py",

@@ -15,9 +15,9 @@ Two test functions:
    small set of cases where we deliberately diverge. Two reasons apply:
      - Known Gap #2 in cyclomatic.py: comprehensions counted +1 per
        group; radon counts +1 per for/if clause.
-     - Bug B1 (surfaced 2026-04-20 via match_statement.py fixture):
-       match_statement / case_clause missing from our CFN map —
-       radon correctly counts each case arm; we ignore them entirely.
+     - Bug B1 fix (parse-bugs branch): we now count every case_clause
+       as +1; radon skips a trailing bare `case _:` as the default arm.
+       For fixtures without a trailing wildcard the values agree.
 
 Decorator-stack getter/setter methods are excluded because Bug B2
 (qualified_name collision for `Thing.name`) makes dict-keyed lookup
@@ -98,6 +98,9 @@ AGREEMENT_CASES: list[tuple[str, str | None, str]] = [
     # adversarial/exception_groups.py — both tools blind to except*, agree at 1
     ("adversarial/exception_groups.py", None, "run_all"),
     ("adversarial/exception_groups.py", None, "handle_many"),
+    # adversarial/match_statement.py — unpack_point has 3 non-wildcard cases;
+    # classify_shape ends in bare `case _:` so radon discounts it (delta below).
+    ("adversarial/match_statement.py", None, "unpack_point"),
     # adversarial/generics_pep695.py
     ("adversarial/generics_pep695.py", None, "identity"),
     ("adversarial/generics_pep695.py", None, "head"),
@@ -146,17 +149,10 @@ DELTA_CASES: list[tuple[str, str | None, str, int, int, str]] = [
         "adversarial/match_statement.py",
         None,
         "classify_shape",
-        1,
-        3,
-        "Bug B1: match_statement absent from CFN map — we undercount match arms",
-    ),
-    (
-        "adversarial/match_statement.py",
-        None,
-        "unpack_point",
-        1,
         4,
-        "Bug B1",
+        3,
+        "B1 fix: instinct counts every case_clause +1 (3 arms → 4); radon "
+        "skips the trailing bare `case _:` as the default arm",
     ),
     (
         "adversarial/multi_clause_comp.py",
