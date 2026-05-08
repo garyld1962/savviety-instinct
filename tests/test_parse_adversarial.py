@@ -11,17 +11,14 @@ PEP 695 generics, PEP 654 except groups). These tests assert:
 4. Specific structural details worth pinning (delegation_kind,
    statement_count, uniqueness).
 
-Known bugs discovered via these fixtures are marked `xfail(strict=True)`
-with fixture-file references. When the bug is fixed, the `xfail` flips
-to `XPASS` and strict mode raises — forcing the fixer to remove the
-marker and make the assertion real.
+Bugs B1 (match) and B2 (decorator collisions) were originally pinned
+via `xfail(strict=True)` here. After the parse-bugs branch the markers
+were removed and the assertions made real.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-
-import pytest
 
 from savviety_instinct.parse.python import PYTHON_ADAPTER
 from savviety_instinct.parse.types import DelegationKind
@@ -130,19 +127,21 @@ def test_decorator_stack_class_detected() -> None:
     assert {c.name for c in result.classes} == {"Thing"}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Bug: qualified_name uniqueness violated — @property getter and "
-        "@setter both produce 'Thing.name'. Downstream consumers keyed by "
-        "qualified_name will collapse the two. See "
-        "tests/fixtures/python/adversarial/decorator_stack.py docstring."
-    ),
-)
 def test_decorator_stack_qualified_names_unique() -> None:
+    """Bug B2 fix: getter/setter/deleter decorators produce distinct
+    qualified_names via "[getter]" / "[setter]" / "[deleter]" suffixes.
+    Other duplicates (rare) fall back to "@L<line>"."""
     result = _parse("decorator_stack.py")
     qnames = [f.qualified_name for f in result.functions]
     assert len(qnames) == len(set(qnames)), f"duplicates in {qnames}"
+
+
+def test_decorator_stack_property_setter_disambiguated() -> None:
+    """Specific suffix shape — pinned so the format change is intentional."""
+    result = _parse("decorator_stack.py")
+    qnames = {f.qualified_name for f in result.functions}
+    assert "Thing.name[getter]" in qnames
+    assert "Thing.name[setter]" in qnames
 
 
 # ---------- multi_clause_comp.py ----------

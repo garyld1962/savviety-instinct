@@ -657,10 +657,39 @@ def _collect_syntax_errors(tree: Tree, source: bytes, file_path: str) -> list[Pa
     return errors
 
 
+def _decorator_qname_suffix(fn_node: Node, source: bytes) -> str:
+    """Disambiguator suffix for property/setter/deleter decorators.
+
+    Returns "[getter]", "[setter]", "[deleter]", or "" — used to make
+    qualified_name unique when a class has multiple methods sharing the
+    same name (e.g. a `@property` getter alongside a `@<name>.setter`).
+    First matching decorator wins; non-property decorators are ignored.
+    """
+    parent = fn_node.parent
+    if parent is None or parent.type != "decorated_definition":
+        return ""
+    for child in parent.children:
+        if child.type != "decorator":
+            continue
+        for inner in child.children:
+            if inner.type == "identifier" and _text(inner, source) == "property":
+                return "[getter]"
+            if inner.type == "attribute":
+                idents = [c for c in inner.children if c.type == "identifier"]
+                if idents:
+                    last = _text(idents[-1], source)
+                    if last == "setter":
+                        return "[setter]"
+                    if last == "deleter":
+                        return "[deleter]"
+    return ""
+
+
 def _collect_functions(
     tree: Tree, source: bytes, file_path: str
 ) -> list[tuple[FunctionDefNode, Node]]:
     out: list[tuple[FunctionDefNode, Node]] = []
+    seen_qnames: set[str] = set()
     stack: list[tuple[Node, str | None]] = [(tree.root_node, None)]
     while stack:
         node, enclosing_class = stack.pop()
@@ -669,7 +698,14 @@ def _collect_functions(
             if name_node is None:
                 continue
             name = _text(name_node, source)
-            qualified = f"{enclosing_class}.{name}" if enclosing_class else name
+            base_qname = f"{enclosing_class}.{name}" if enclosing_class else name
+            qualified = base_qname + _decorator_qname_suffix(node, source)
+            if qualified in seen_qnames:
+                # Fallback for non-property duplicates: append a line
+                # suffix. First occurrence keeps the bare name; later
+                # duplicates carry the line number.
+                qualified = f"{qualified}@L{node.start_point[0] + 1}"
+            seen_qnames.add(qualified)
             params = _extract_parameter_names(node, source)
             body_node = node.child_by_field_name("body")
             control_flow = (
