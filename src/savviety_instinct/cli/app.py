@@ -100,13 +100,17 @@ def run_cmd(
 ) -> None:
     """Analyze Python code at PATH and print metrics to stdout.
 
-    Slice 3: prints tab-separated rows (path:lines, qualified_name, metric=value, confidence).
-    Full report layer arrives in Slice 6.
+    Slice 5: persists observations to `.instinct/instinct.db` per D10
+    while preserving the Slice 3 stdout output. Re-runs short-circuit
+    via the dormant-artifact shortcut (arch §8.2). Full report layer
+    arrives in Slice 6.
     """
-    from savviety_instinct.analyze import run_pipeline
+    from savviety_instinct.analyze import run_pipeline_with_persistence
     from savviety_instinct.config.loader import ConfigFileError, load_config
+    from savviety_instinct.storage.sqlite_store import SQLAlchemyObservationStore
 
-    config_path = Path.cwd() / ".instinct" / "config.yaml"
+    cwd = Path.cwd()
+    config_path = cwd / ".instinct" / "config.yaml"
     try:
         config = load_config(config_path)
     except ConfigFileError as e:
@@ -117,7 +121,9 @@ def run_cmd(
         typer.echo(f"Path not found: {path}", err=True)
         raise typer.Exit(code=2)
 
-    results, summary = run_pipeline(path, config)
+    db_path = cwd / ".instinct" / "instinct.db"
+    store = SQLAlchemyObservationStore(db_path)
+    results, summary = run_pipeline_with_persistence(path, config, store, cwd=cwd)
     rows = list(results)
 
     # Deterministic sort.
