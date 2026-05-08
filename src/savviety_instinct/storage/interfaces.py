@@ -135,6 +135,9 @@ class ObservationStore(Protocol):
     def upsert_artifact(
         self, run_id: RunId, artifact: Artifact, metrics: list[MetricValue]
     ) -> ArtifactId: ...
+    def try_dormant_shortcut(
+        self, run_id: RunId, ast_hash: str, language: str
+    ) -> tuple[ArtifactId, list[MetricValue]] | None: ...
     def record_observation(
         self, run_id: RunId, artifact_id: ArtifactId, location: FileLocation
     ) -> None: ...

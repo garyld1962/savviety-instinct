@@ -22,7 +22,7 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import Engine, create_engine, event, text
 
-from savviety_instinct.core.types import Artifact, MetricValue
+from savviety_instinct.core.types import Artifact, Confidence, MetricValue
 from savviety_instinct.storage.interfaces import (
     ArtifactId,
     FileLocation,
@@ -35,6 +35,25 @@ from savviety_instinct.storage.interfaces import (
 
 _STABILITY_VOLATILE = "volatile"
 _STABILITY_SETTLED = "settled"
+
+
+def _parse_metrics_json(raw: str) -> list[MetricValue]:
+    """Reconstruct a list[MetricValue] from the metrics_json column.
+
+    Iteration order matches the JSON object's key order, which (per
+    Slice 5 task 3) was written with sort_keys=True. Output is therefore
+    deterministic and stable across runs."""
+    parsed = json.loads(raw)
+    return [
+        MetricValue(
+            metric_id=metric_id,
+            value=v["value"],
+            metric_version=v["version"],
+            confidence=Confidence(v["confidence"]),
+            notes=v.get("notes"),
+        )
+        for metric_id, v in parsed.items()
+    ]
 
 
 @cache
@@ -251,6 +270,75 @@ class SQLAlchemyObservationStore:
                 },
             )
             return int(inserted.scalar_one())
+
+    def try_dormant_shortcut(
+        self, run_id: RunId, ast_hash: str, language: str
+    ) -> tuple[ArtifactId, list[MetricValue]] | None:
+        """Try to take the dormant-artifact shortcut for this artifact in
+        this run.
+
+        On hit (artifact exists at the run's combined metric_version):
+            - bump occurrence_count, last_seen_run_id, and stability_tier
+              atomically with the lookup
+            - return (artifact_id, cached_metrics) parsed from
+              metrics_json. Caller skips metric computation entirely.
+
+        On miss: return None. Caller computes metrics and calls
+        upsert_artifact + record_observation as the cold path.
+
+        This is the substrate for the NFR-7 (≤15s re-run) target:
+        skipping metric computation on stable artifacts is the dominant
+        optimization on mature codebases.
+        """
+        with self._engine.begin() as conn:
+            run_row = conn.execute(
+                text("SELECT metric_version FROM runs WHERE id = :id"),
+                {"id": run_id},
+            ).fetchone()
+            if run_row is None:
+                raise LookupError(f"try_dormant_shortcut: run_id {run_id} not found")
+            combined_metric_version = run_row[0]
+
+            existing = conn.execute(
+                text(
+                    """
+                    SELECT id, occurrence_count, metrics_json
+                      FROM observation_artifacts
+                     WHERE ast_hash = :ast_hash
+                       AND language = :language
+                       AND metric_version = :metric_version
+                    """
+                ),
+                {
+                    "ast_hash": ast_hash,
+                    "language": language,
+                    "metric_version": combined_metric_version,
+                },
+            ).fetchone()
+            if existing is None:
+                return None
+
+            artifact_id, prior_count, metrics_json = existing
+            new_count = int(prior_count) + 1
+            new_tier = _STABILITY_SETTLED if new_count >= 2 else _STABILITY_VOLATILE
+            conn.execute(
+                text(
+                    """
+                    UPDATE observation_artifacts
+                       SET last_seen_run_id = :run_id,
+                           occurrence_count = :count,
+                           stability_tier = :tier
+                     WHERE id = :id
+                    """
+                ),
+                {
+                    "run_id": run_id,
+                    "count": new_count,
+                    "tier": new_tier,
+                    "id": artifact_id,
+                },
+            )
+            return int(artifact_id), _parse_metrics_json(metrics_json)
 
     def record_observation(
         self, run_id: RunId, artifact_id: ArtifactId, location: FileLocation

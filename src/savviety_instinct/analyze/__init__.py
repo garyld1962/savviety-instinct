@@ -13,6 +13,7 @@ from savviety_instinct.analyze.metrics import (
     STATEMENT_COUNT_METRIC,
     TRIVIAL_DELEGATION_RATIO_METRIC,
 )
+from savviety_instinct.analyze.persistence import run_pipeline_with_persistence
 from savviety_instinct.analyze.pipeline import PipelineSummary, run_pipeline
 from savviety_instinct.analyze.rules import CognitiveRules, load_cognitive_rules
 
@@ -48,6 +49,7 @@ __all__ = [
     "TRIVIAL_DELEGATION_RATIO_METRIC",
     "load_cognitive_rules",
     "run_pipeline",
+    "run_pipeline_with_persistence",
 ]
 
 # Slice 4b: fail-fast on a metric with empty applies_to. An empty frozenset
