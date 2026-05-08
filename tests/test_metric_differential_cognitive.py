@@ -13,7 +13,8 @@ Reference philosophy differs from ours on three points:
   2. Async constructs — reference: not counted. Instinct: +1 per async
      for/with, same as the sync equivalents (ours appears more correct
      per SonarSource's intent; reference simply ignores async nodes).
-  3. `except*` — reference: +1 per clause. Instinct: not counted (Bug B3).
+  3. `except*` — Bug B3 fixed: instinct now counts +1 per clause, matching
+     the reference. handle_many moved into agreement_cases.
   4. `match` — instinct counts +1 per case arm (Bug B1 fix); reference
      silently ignores `Match` / `match_case` AST nodes. Documented as
      a delta below.
@@ -99,8 +100,9 @@ AGREEMENT_CASES: list[tuple[str, str | None, str]] = [
     ("adversarial/decorator_stack.py", None, "cached_helper"),
     # Thing.name methods excluded due to Bug B2 qualified_name collision
     ("adversarial/decorator_stack.py", "Thing", "from_id"),
-    # exception_groups.py
+    # exception_groups.py — both correctly count except* arms (B3 fix)
     ("adversarial/exception_groups.py", None, "run_all"),
+    ("adversarial/exception_groups.py", None, "handle_many"),
     # generics_pep695.py
     ("adversarial/generics_pep695.py", None, "identity"),
     ("adversarial/generics_pep695.py", None, "head"),
@@ -159,14 +161,6 @@ DELTA_CASES: list[tuple[str, str | None, str, int, int, str]] = [
         1,
         0,
         "Philosophy split: async for / async with ignored by reference",
-    ),
-    (
-        "adversarial/exception_groups.py",
-        None,
-        "handle_many",
-        0,
-        2,
-        "Bug B3: instinct doesn't count except* clauses; reference correctly does (+1 each)",
     ),
     (
         "adversarial/match_statement.py",

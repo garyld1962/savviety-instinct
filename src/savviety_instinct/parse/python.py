@@ -46,6 +46,7 @@ _TS_TO_CFN_KIND: dict[str, ControlFlowNodeKind] = {
     "while_statement": ControlFlowNodeKind.WHILE,
     "try_statement": ControlFlowNodeKind.TRY,
     "except_clause": ControlFlowNodeKind.EXCEPT,
+    "except_group_clause": ControlFlowNodeKind.EXCEPT,
     "match_statement": ControlFlowNodeKind.MATCH,
     "case_clause": ControlFlowNodeKind.CASE,
     "conditional_expression": ControlFlowNodeKind.TERNARY,
@@ -72,6 +73,7 @@ _STATEMENT_NODE_TYPES: frozenset[str] = frozenset(
         "while_statement",
         "try_statement",
         "except_clause",
+        "except_group_clause",
         "match_statement",
         "with_statement",
         "return_statement",
@@ -202,8 +204,9 @@ def _block_of(node: Node) -> Node | None:
     """
     if node.type in ("if_statement", "elif_clause"):
         return node.child_by_field_name("consequence")
-    if node.type == "except_clause":
-        # except_clause has no named field for its block; find by type
+    if node.type in ("except_clause", "except_group_clause"):
+        # Neither has a named field for its block; find by type. PEP 654's
+        # except* (except_group_clause) shares this layout with except_clause.
         for child in node.children:
             if child.type == "block":
                 return child
@@ -280,9 +283,12 @@ def _collect_cfns_rec(node: Node, file_path: str, depth: int, out: list[ControlF
                     children=tuple(children_cfns),
                 )
             )
-            # except clauses: emit as siblings at same depth
+            # except clauses: emit as siblings at same depth.
+            # except_group_clause (PEP 654 `except*`) is treated identically
+            # to except_clause for cognitive/cyclomatic purposes — each arm
+            # is a +1 decision regardless of group vs single.
             for child in node.children:
-                if child.type == "except_clause":
+                if child.type in ("except_clause", "except_group_clause"):
                     exc_block = _block_of(child)
                     exc_children: list[ControlFlowNode] = []
                     if exc_block is not None:
@@ -426,21 +432,22 @@ def _count_statements(body_node: Node) -> int:
             # Recurse into compound statements' bodies (if/elif use "consequence")
             if node.type in ("if_statement", "elif_clause"):
                 block = node.child_by_field_name("consequence")
-            elif node.type == "except_clause":
+            elif node.type in ("except_clause", "except_group_clause"):
                 block = _block_of(node)
             else:
                 block = node.child_by_field_name("body")
             if block is not None:
                 stack.extend(block.children)
-            # Alternative/supplemental branches: elif, else, finally.
-            # except_clause is now in _STATEMENT_NODE_TYPES; push the node
-            # itself so it is counted and its body recursed in the normal path.
+            # Alternative/supplemental branches: elif, else, finally, except*.
+            # except_clause / except_group_clause are in _STATEMENT_NODE_TYPES;
+            # push the node itself so it is counted and its body recursed in
+            # the normal path.
             for child in node.children:
                 if child.type in ("elif_clause", "else_clause", "finally_clause"):
                     alt_block = _block_of(child)
                     if alt_block is not None:
                         stack.extend(alt_block.children)
-                elif child.type == "except_clause":
+                elif child.type in ("except_clause", "except_group_clause"):
                     stack.append(child)
     return count
 

@@ -19,7 +19,7 @@ from savviety_instinct.core.types import (
 
 class StatementCountMetric:
     id: str = "statement_count"
-    version: str = "1.1.0"
+    version: str = "1.2.0"
     applies_to: frozenset[ArtifactKind] = frozenset({ArtifactKind.FUNCTION})
     required_inputs: frozenset[InputKind] = frozenset({InputKind.AST})
 

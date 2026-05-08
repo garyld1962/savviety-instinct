@@ -19,11 +19,13 @@ Two test functions:
        as +1; radon skips a trailing bare `case _:` as the default arm.
        For fixtures without a trailing wildcard the values agree.
 
-Decorator-stack getter/setter methods are excluded because Bug B2
-(qualified_name collision for `Thing.name`) makes dict-keyed lookup
-ambiguous. Exception-group (`except*`) handling is currently wrong in
-BOTH tools symmetrically — they agree on a wrong value, so they appear
-in the agreement list rather than as a delta.
+Decorator-stack getter/setter methods are excluded because the differential
+test keys by (class, name); B2's fix gives our qualified_name unique
+suffixes but the radon side has no equivalent disambiguator, so the
+two methods would still collide in the lookup dict. Out of scope here.
+
+Exception groups (`except*`): instinct counts each clause +1 (Bug B3
+fix); radon is still blind to PEP 654 — moved to documented deltas.
 """
 
 from __future__ import annotations
@@ -95,9 +97,9 @@ AGREEMENT_CASES: list[tuple[str, str | None, str]] = [
     # adversarial/decorator_stack.py — module-scope function only
     # (methods excluded due to Bug B2 qualified_name collision)
     ("adversarial/decorator_stack.py", None, "cached_helper"),
-    # adversarial/exception_groups.py — both tools blind to except*, agree at 1
+    # adversarial/exception_groups.py — run_all has no except*, agrees.
+    # handle_many is a documented delta below (B3 fix vs radon blind spot).
     ("adversarial/exception_groups.py", None, "run_all"),
-    ("adversarial/exception_groups.py", None, "handle_many"),
     # adversarial/match_statement.py — unpack_point has 3 non-wildcard cases;
     # classify_shape ends in bare `case _:` so radon discounts it (delta below).
     ("adversarial/match_statement.py", None, "unpack_point"),
@@ -153,6 +155,15 @@ DELTA_CASES: list[tuple[str, str | None, str, int, int, str]] = [
         3,
         "B1 fix: instinct counts every case_clause +1 (3 arms → 4); radon "
         "skips the trailing bare `case _:` as the default arm",
+    ),
+    (
+        "adversarial/exception_groups.py",
+        None,
+        "handle_many",
+        3,
+        1,
+        "B3 fix: instinct counts each except* clause +1 (2 arms → 3); "
+        "radon is blind to PEP 654 except_group_clause",
     ),
     (
         "adversarial/multi_clause_comp.py",

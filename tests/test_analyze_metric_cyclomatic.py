@@ -61,7 +61,7 @@ def test_cyclomatic_matches_fixture(metric_fixtures_result, qualified: str, expe
 
 def test_cyclomatic_metadata() -> None:
     assert CYCLOMATIC_METRIC.id == "cyclomatic_complexity"
-    assert CYCLOMATIC_METRIC.version == "1.1.0"
+    assert CYCLOMATIC_METRIC.version == "1.2.0"
     assert CYCLOMATIC_METRIC.applies_to == frozenset({ArtifactKind.FUNCTION})
     assert CYCLOMATIC_METRIC.required_inputs == frozenset({InputKind.AST})
 
