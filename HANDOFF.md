@@ -2,8 +2,8 @@
 
 **Purpose:** enable a fresh Claude Code session (or a returning Gary) to resume without reconstructing context from git log + memory.
 
-**Last updated:** 2026-04-21
-**State at handoff:** Slices 1–4b merged to master. Cross-cutting test hardening initiative shipped as PR #6 (open, awaiting review/merge). Three parser bugs (B1–B3) surfaced by the hardening layer and logged for follow-up.
+**Last updated:** 2026-05-11
+**State at handoff:** Slices 1–4b on master, plus the cross-cutting test-hardening initiative (PR #6) and the parser-bug fixes (PR #7) for B1/B2/B3. **Slice 5 (observation store writes + dormant shortcut) is OPEN as PR #8** — six commits, 456 tests passing on the branch, awaiting review/merge.
 
 ---
 
@@ -19,65 +19,66 @@ All design docs live in `docs/`:
 
 Then:
 
-6. `docs/plans/2026-04-19-slice-4b-module-metrics.md` — most recent shipped slice plan; template for module-level metric work
-7. `docs/plans/2026-04-20-test-hardening-algorithmic-rigor.md` — cross-cutting test rigor initiative (PR #6); template for non-slice initiatives and bug appendices
-8. `docs/testing.md` — three-layer test strategy (unit / differential / property-based); adversarial fixture convention
-9. Prior plans under `docs/plans/` for Slices 1, 2, 3, 4a — how things got here
-10. `.claude/SESSION.md` (if present; per-machine, gitignored) — in-flight state
+6. `docs/plans/2026-05-08-slice-5-storage-writes.md` — current open slice plan; template for slices that touch storage
+7. `docs/plans/2026-04-19-slice-4b-module-metrics.md` — most recent shipped feature-slice plan; template for pure metric work
+8. `docs/plans/2026-04-20-test-hardening-algorithmic-rigor.md` — cross-cutting initiative template (test rigor + bug appendix pattern)
+9. `docs/testing.md` — three-layer test strategy (unit / differential / property-based); adversarial fixture convention
+10. Prior plans under `docs/plans/` for Slices 1–4a — how things got here
+11. `.claude/SESSION.md` (if present; per-machine, gitignored) — in-flight state
 
 ---
 
 ## Quick-start: "I just sat down, what do I do?"
 
 1. `/whereami` — branch state, open PRs, last session context
-2. Check https://github.com/garyld1962/savviety-instinct/pulls — is PR #6 still open?
-3. If yes, review/merge it, then pick next-step from §"Next work" below
-4. If no, refresh this doc from `git log` + check PR list for anything newer
+2. Check https://github.com/garyld1962/savviety-instinct/pulls — is PR #8 still open?
+3. If yes, review/merge it (see §"Next work" for merge command and post-merge options).
+4. If no, refresh this doc from `git log master --oneline -10` + `gh pr list --state all --limit 5`.
 
 ---
 
 ## Project state
 
-- **6 source modules populated** per arch §2 layout: `core/`, `storage/`, `config/`, `cli/`, `parse/`, `graph/`, `analyze/`. Reserved skeletons (`llm/`, `curate/`, `patterns/`, `suggest/`, `mcp/`, `report/`) are empty `__init__.py` stubs.
-- **386 passed + 2 xfail** on the hardening branch (pre-PR-6 merge: 296 passed). Coverage ≥93% with hardening layer; `parse/python.py` at 91% line coverage but now stress-tested by adversarial fixtures.
+- **8 source modules populated** per arch §2 layout: `core/`, `storage/`, `config/`, `cli/`, `parse/`, `graph/`, `analyze/`. Reserved skeletons (`llm/`, `curate/`, `patterns/`, `suggest/`, `mcp/`, `report/`) are empty `__init__.py` stubs.
+- **Test count: 389 passed on master tip (`424c55e`); 456 passed on `slice-5-storage-writes` (PR #8 head).** Coverage 90% (TOTAL). `parse/python.py` at 91% line coverage; storage modules between 87% and 100% on the slice-5 branch.
 - **PR cadence:** one PR per slice from arch §15. Merge-commit style (not squash). Branches live after merge — not deleted. Non-slice initiatives (test hardening, bug sweeps) get their own plan doc under `docs/plans/` and follow the same merge-commit flow.
-- **Python 3.12+**, `uv`-managed (no pip/poetry/pyenv). Typer CLI. Pydantic v2 config. SQLAlchemy 2 + Alembic for the (unwritten-to) SQLite schema.
+- **Python 3.12+**, `uv`-managed (no pip/poetry/pyenv). Typer CLI. Pydantic v2 config. SQLAlchemy 2 + Alembic for the SQLite schema — **active writer in Slice 5** (PR #8).
 
-### Slices shipped (commits on master)
+### Shipped to master
 
-| Slice | Scope | Merge commit |
-|-------|-------|--------------|
-| 1 | Bootstrap: `core/` types, `storage/` interfaces + schema migration, `config/`, `cli/` (version + init + R2 stubs), pre-commit hooks, NFR-1 no-network test | `ebd23a8` (PR #1) |
-| 2 | `parse/` (Python via tree-sitter), `graph/` (intra-file call graph), `ast_hash` via blake3/xxhash, `AnalysisContext.call_graph` | `25b41a9` (PR #2) |
-| — | CLAUDE.md scaffold standalone commit | `63efd7c` |
-| 3 | Three metrics (`statement_count`, `cyclomatic`, `cognitive`), `ControlFlowNode`, `analyze/pipeline.py`, `instinct run <path>`, cognitive rules YAML | `c20e97c` (PR #3) |
-| 4a | Three function-level metrics (`max_nesting_depth`, `npath`, `identifier_quality`); `FunctionDefNode.identifier_names` field | PR #4 (merged) |
-| 4b | Three module-level metrics (`trivial_delegation_ratio`, `median_function_length`, `function_length_bimodality`); first `ArtifactKind.MODULE` pipeline dispatch; `DelegationKind` enum; registry-duplication collapse (deleted `_METRICS`); row-count tests parametrized via `tests/_helpers.py` | `2a40ae7` (PR #5) |
+| Slice / Initiative | Scope | Merge commit |
+|---|---|---|
+| Slice 1 | Bootstrap: `core/` types, `storage/` interfaces + schema migration, `config/`, `cli/` (version + init + R2 stubs), pre-commit hooks, NFR-1 no-network test | PR #1 (`ebd23a8`) |
+| Slice 2 | `parse/` (Python via tree-sitter), `graph/` (intra-file call graph), `ast_hash` via blake3/xxhash, `AnalysisContext.call_graph` | PR #2 (`25b41a9`) |
+| — | CLAUDE.md scaffold | `63efd7c` |
+| Slice 3 | Three metrics (`statement_count`, `cyclomatic`, `cognitive`), `ControlFlowNode`, `analyze/pipeline.py`, `instinct run <path>`, cognitive rules YAML | PR #3 (`c20e97c`) |
+| Slice 4a | Function metrics: `max_nesting_depth`, `npath`, `identifier_quality`; `FunctionDefNode.identifier_names` | PR #4 |
+| Slice 4b | Module metrics: `trivial_delegation_ratio`, `median_function_length`, `function_length_bimodality`; first `ArtifactKind.MODULE` pipeline dispatch; `DelegationKind` enum; registry-duplication collapse | PR #5 (`2a40ae7`) |
+| Test hardening | Cross-cutting: 26 adversarial parse fixtures, 9 hypothesis invariants, 57 differential tests (cyclomatic vs `radon`, cognitive vs `cognitive_complexity` pkg), `docs/testing.md`. Surfaced bugs B1/B2/B3. | PR #6 (`da8b4c4`) |
+| Parser bug fixes | B1 (`match` / `case_clause`), B2 (`@property`/`@setter` qualified_name collision via `[getter]`/`[setter]`/`[deleter]` suffix), B3 (`except_group_clause`). Metric versions: `cyclomatic`, `cognitive`, `statement_count` → 1.2.0. | PR #7 (`424c55e`) |
 
-### Test hardening (current state — branch `test-hardening-algorithmic-rigor`, PR #6 open)
+### Active — Slice 5 (PR #8, branch `slice-5-storage-writes`)
 
-Cross-cutting test rigor initiative (not a slice). Adds three layers atop existing unit tests: 26 adversarial parse fixtures under `tests/fixtures/python/adversarial/`, 9 hypothesis-based invariant tests, 57 differential tests (cyclomatic vs `radon`, cognitive vs `cognitive_complexity` package). `docs/testing.md` onboards future contributors. Three parser bugs surfaced, logged, **not fixed** — see §"Bugs awaiting fix" below. Plan: `docs/plans/2026-04-20-test-hardening-algorithmic-rigor.md`.
+Observation store writes. Closes the "Accumulate" half of the MVP per arch §4.1 / §8.2 / D10.
 
-### Bugs awaiting fix (surfaced by PR #6's adversarial layer)
-
-Logged in the hardening plan's "Bugs Surfaced" appendix. All three are silent-undercount bugs — tests still pass on existing fixtures; the hardening layer is what exposed them.
-
-| # | Severity | Summary |
-|---|----------|---------|
-| **B1** | High | `match_statement` / `case_clause` absent from `_STATEMENT_NODE_TYPES` and `_TS_TO_CFN_KIND`. Match-only bodies report `statement_count=0`, `cyclomatic=1`, `cognitive=0`. Breaks `median_function_length`, `function_length_bimodality`, `trivial_delegation_ratio`, `cyclomatic_complexity`, `cognitive_complexity` for any 3.10+ module using pattern matching. |
-| **B2** | Medium | `qualified_name` uniqueness violated — `@property` getter and `@setter` share `"Thing.name"`. Consumers keyed by qualified_name (test helpers, future SQL storage) silently collapse them. |
-| **B3** | Medium | `except_group` (PEP 654 `except*`) absent from `_TS_TO_CFN_KIND`. Not counted as a decision. Asymmetric vs the `cognitive_complexity` reference package, which correctly counts `except*` clauses — confirms this is an undercount, not a shared blind spot. |
-
-B1 and B2 are pinned via `xfail(strict=True)` in `tests/test_parse_adversarial.py` — they flip to unexpected-pass (and strict-fail) if fixed without removing the marker. B3 is documented in the differential cognitive test only (no xfail; reference tool reveals the asymmetry).
+- **`storage/sqlite_store.py:SQLAlchemyObservationStore`** — concrete `ObservationStore` Protocol impl. Auto-upgrades schema to head on construction (programmatic Alembic Config, cached module-level). Per-engine WAL + synchronous=NORMAL pragmas via SQLAlchemy event listener.
+- **`storage/fingerprint.py:derive_repo_fingerprint(cwd)`** — three-tier (first-commit SHA → origin URL → synthetic hostname:abspath). Source label written to `runs.repo_fingerprint_source`.
+- **`storage/run_meta.py`** — `compute_config_hash`, `compute_combined_metric_version` (compact `mv_<sha12>` hash of sorted `id:version` pairs — Scope #2), `derive_git_commit_branch`.
+- **`analyze/persistence.py:run_pipeline_with_persistence(path, config, store)`** — wraps `analyze.pipeline.run_pipeline`'s machinery with the store and adds the dormant-artifact shortcut. Bare `run_pipeline` stays storage-free so existing unit tests keep bypassing the DB.
+- **Dormant shortcut**: `ObservationStore.try_dormant_shortcut(run_id, ast_hash, language)` returns `(artifact_id, cached_metrics) | None`. On hit, bumps `last_seen_run_id` / `occurrence_count` / `stability_tier` atomically and the wrapper yields cached metrics; the metric layer is not re-entered. Proven by a compute-call spy on `CYCLOMATIC_METRIC` in `tests/integration/test_re_run.py`.
+- **`stability_tier` minimal** (Scope #3): `volatile` → `settled` at `occurrence_count >= 2`. `dormant` deferred to Slice 6.
+- **`context_hash` partial** (Scope #5): `sha256(language|enclosing_class|caller_count|callee_count)`. R2 extends per D6.
+- **CLI wired**: `instinct run` opens the store at `<cwd>/.instinct/instinct.db`, calls the persistence wrapper. Stdout output unchanged from Slice 3.
+- **Out of scope** (deferred): `rankings`, `run_profiles` (Slice 6); 180-day TTL cleanup; `instinct vacuum`; read-side `ObservationQuery` impl; `dormant` tier transitions; `instinct sync` (R2).
 
 ---
 
 ## Working agreement (frozen — Gary's rules)
 
 - **`uv` only.** No `pip`, `poetry`, `pyenv`.
-- **Decisions in `docs/01-locked-decisions.md` are frozen.** If you think one is wrong, raise it explicitly — do not silently work around.
+- **Decisions in `docs/01-locked-decisions.md` are frozen.** If you think one is wrong, raise it explicitly — do not silently work around. (2026-05-08 example: I briefly considered centralized SQL Server storage; raising D10 / D5 / D8 conflicts reverted the direction — D10 stays as locked.)
 - **Layer boundaries from arch spec §2 are absolute.** `core` is at the bottom; `analyze/` and `curate/` never import each other; all DB access goes through `storage/`. Use `TYPE_CHECKING` + quoted annotations to preserve layering when a lower-layer type needs to reference an upper-layer type.
-- **Every PR maps to one slice from §15.** No combining slices. One plan per slice under `docs/plans/`.
+- **Every PR maps to one slice from §15** (or a cross-cutting initiative with its own plan doc). No combining slices. One plan per slice under `docs/plans/`.
 - **Tests required per metric before that metric merges.** Ground-truth fixtures are authoritative; iterate code to match the fixture, not the other way around.
 - **One commit per logical change.** Task-level commits within a slice; slice-level merge commit on master.
 - **When in doubt about scope, default to "not in MVP."**
@@ -91,26 +92,35 @@ These are encoded in code; listed here so a fresh agent doesn't reinvent them:
 ### Layering (arch §2)
 `core` → `config / storage / parse / graph / analyze / cli` hierarchy is absolute. `core.types.AnalysisContext` references `CallGraph` and `ParseResult` via `TYPE_CHECKING` + quoted string annotations — no runtime import. Verified by a `sys.modules` assertion in tests.
 
-### Storage model (D10)
-SQLite per-repo at `.instinct/instinct.db` is canonical. Postgres warehouse is reserved as a one-way derived view (R2+). `repo_fingerprint` column carries repo identity for warehouse aggregation. **Slice 4a still doesn't write to storage** — that's Slice 5.
+### Storage model (D10 + Slice 5)
+SQLite per-repo at `.instinct/instinct.db` is canonical. Postgres warehouse reserved as a one-way derived view (R2+). `repo_fingerprint` column on `runs` and `observation_artifacts` carries repo identity for warehouse aggregation. **Slice 5 (PR #8 open) is the first writer:** `instinct run` persists `runs` + `observation_artifacts` + `run_observations` with full dormant-artifact dedup. `rankings` and `run_profiles` tables exist but stay empty until Slice 6.
 
 ### `ast_hash` (arch §4.2, D6)
 `blake3` preferred, `xxhash` fallback at import time. `HASH_ALGORITHM` constant records backend. Normalization is **whitespace-only** — tree-sitter's `str(node)` natively omits identifier text and literal values (discovered empirically during Slice 2 code review). The hash is shape-invariant across identifier/literal changes without any normalizer work.
 
+### Combined `metric_version` (Slice 5 Scope #2)
+The schema's single `metric_version` column on `runs` and `observation_artifacts` predates the multi-metric reality. Slice 5 computes a per-run `mv_<sha12>` hash of every registered metric's `id:version` pair (sorted, joined by `|`). Adding or bumping any metric changes the combined version, naturally invalidating dedup at the previous version — old rows stay inert. Refactor to per-metric versioning is out of MVP scope.
+
 ### Intra-file call graph (Slice 2)
 `networkx.DiGraph` wrapped by `CallGraph`. Unresolved callees are silently DROPPED (no `ExternalCallee` placeholders — Scope Decision #2 from Slice 2 plan). Cross-file resolution is post-MVP.
 
-### ControlFlowNode tree (Slice 3)
-Domain-neutral nodes (IF/ELIF/ELSE/FOR/WHILE/TRY/EXCEPT/TERNARY/BOOLEAN_SEQUENCE/COMPREHENSION) pre-computed on `FunctionDefNode.control_flow` during parse. elif/else/except emitted as SIBLINGS at parent's depth (Sonar semantics), not children. Boolean_operator in if-condition also a sibling. Fourteen empirically-verified test cases in `test_parse_control_flow.py`.
+### ControlFlowNode tree (Slice 3 + parser bug fixes)
+Domain-neutral nodes (IF/ELIF/ELSE/FOR/WHILE/TRY/EXCEPT/MATCH/CASE/TERNARY/BOOLEAN_SEQUENCE/COMPREHENSION) pre-computed on `FunctionDefNode.control_flow` during parse. elif/else/except/case emitted as SIBLINGS at parent's depth (Sonar semantics), not children. MATCH itself is a marker (base=0); each CASE is a sibling like elif (base=1, increments_nesting=false). `except_group_clause` mapped to EXCEPT (PR #7's B3 fix).
 
 ### Cognitive rules YAML (Slice 3)
 `src/savviety_instinct/core/cognitive_rules/python.yaml` — per-language increment table. Cognitive metric tracks cumulative nesting via `rule.increments_nesting` (NOT parse-level `ControlFlowNode.nesting_depth`), keeping parser rule-agnostic. Loader fails fast if any `ControlFlowNodeKind` has no rule — forces coordinated enum + YAML updates.
 
 ### Metric pattern
-Each metric class lives in `src/savviety_instinct/analyze/metrics/<name>.py` exporting a module-level singleton `<NAME>_METRIC`. Metrics conform to `core.types.Metric` Protocol (Slice 1). `Metric.compute(artifact, context)` looks up the `FunctionDefNode` in `context.parse_result.functions` by `ast_hash` — O(N) per metric per artifact. All 6 Slice 3+4a metrics follow this pattern.
+Each metric class lives in `src/savviety_instinct/analyze/metrics/<name>.py` exporting a module-level singleton `<NAME>_METRIC`. Metrics conform to `core.types.Metric` Protocol (Slice 1). `Metric.compute(artifact, context)` looks up the `FunctionDefNode` in `context.parse_result.functions` by `ast_hash` — O(N) per metric per artifact.
+
+### qualified_name disambiguator (PR #7 / B2)
+`_collect_functions` inspects each function's `decorated_definition` parent. `@property` → `[getter]` suffix; `@<name>.setter` → `[setter]`; `@<name>.deleter` → `[deleter]`. Other duplicates fall back to `@L<line>`. Pinned by `test_decorator_stack_property_setter_disambiguated`.
+
+### Persistence wrapper (Slice 5)
+`analyze.persistence.run_pipeline_with_persistence(path, config, store)` is the only entry point that touches the DB. `analyze.pipeline.run_pipeline` stays a pure generator so metric unit tests keep bypassing storage. The dormant-shortcut path (`try_dormant_shortcut`) yields cached metrics straight from `metrics_json`, never re-entering the metric layer. Compute-call spy in `tests/integration/test_re_run.py` enforces the optimization.
 
 ### Registry (single source)
-`METRICS_REGISTRY` lives in `src/savviety_instinct/analyze/__init__.py` and is the single source of truth. Slice 4b deleted the duplicate `_METRICS` tuple from `pipeline.py`. Adding a new metric now requires one registry update. Module-load-time `assert` guards against a metric with an empty `applies_to` (which the pipeline filter would silently drop).
+`METRICS_REGISTRY` lives in `src/savviety_instinct/analyze/__init__.py` and is the single source of truth. Slice 4b deleted the duplicate `_METRICS` tuple from `pipeline.py`. Adding a new metric now requires one registry update. Module-load-time `assert` guards against a metric with an empty `applies_to`.
 
 ---
 
@@ -119,19 +129,22 @@ Each metric class lives in `src/savviety_instinct/analyze/metrics/<name>.py` exp
 ### Empirical-first before algorithm design
 When an algorithm depends on tree-sitter or CFN-tree structure, **run a REPL inspection before writing code.** Each time this discipline was followed, it surfaced a reality the plan didn't anticipate:
 - Slice 2 Task 5: `str(tree_sitter.Node)` omits literals and identifiers natively
-- Slice 3 Task 8: boolean_operator in if-condition emits as sibling, not child — led to a real parse-layer fix
+- Slice 3 Task 8: boolean_operator in if-condition emits as sibling, not child
 - Slice 4a Task 4: BOOLEAN_SEQUENCE emits as sibling AFTER the IF — drove npath chain-consumption design
+- PR #7 B1: `case_clause` uses `consequence` field (not `body`) for its block — caught by the bare-metric REPL probe before the integration test would have surfaced statement_count=1 instead of 4
+- PR #7 B3: tree-sitter parses `except*` as `except_group_clause`, not `except_group` as the fixture docstring originally guessed
 
 ### Ground-truth fixtures as correctness net
-`tests/fixtures/python/metric_fixtures.py` has 10 hand-crafted functions with expected values for all 6 metrics documented in each function's docstring. **Do not adjust fixture values to match code output — iterate code to match the documented ground truth.** This pattern caught three real parse-layer bugs in Slice 3:
-1. Docstring-as-statement inflation
-2. Missing `except_clause` in statement count
-3. Condition-expression CFN nesting (boolean inside if counted with wrong depth)
+`tests/fixtures/python/metric_fixtures.py` has 10 hand-crafted functions with expected values for all 9 metrics documented in each function's docstring. **Do not adjust fixture values to match code output — iterate code to match the documented ground truth.** Adversarial fixtures under `tests/fixtures/python/adversarial/` add one-construct-per-file stress cases.
 
-Slice 4a ran against the same fixtures and produced correct values first-try — the parse layer has stabilized.
+### Differential tests as drift-detector
+`tests/test_metric_differential_*.py` pin both sides' values when we deliberately diverge from a reference tool — `radon` for cyclomatic, `cognitive_complexity` PyPI pkg for cognitive. Drift on either side surfaces for review. Don't move a delta back into AGREEMENT_CASES without verifying both tools.
+
+### Strict-xfail for found bugs
+When a test surfaces a real bug mid-plan, pin it with `xfail(strict=True)` rather than expanding plan scope to fix. The strict mode flips to failure when the bug is fixed, forcing marker removal. B1/B2 used this pattern from PR #6 through PR #7's fix.
 
 ### Subagent-driven task execution
-Per-task subagent dispatch (from `superpowers:subagent-driven-development`) with two-stage review (spec compliance → code quality) catches bugs that unit tests miss. Slice 2 Task 5 had 3 Critical correctness bugs caught only by code review (cross-class method-name collision, bare-name false positive, dead branch). Fresh-context per subagent also preserves the main thread's context budget.
+Per-task subagent dispatch (from `superpowers:subagent-driven-development`) with two-stage review (spec compliance → code quality) catches bugs that unit tests miss. Fresh-context per subagent also preserves the main thread's context budget.
 
 ---
 
@@ -140,37 +153,43 @@ Per-task subagent dispatch (from `superpowers:subagent-driven-development`) with
 - **`FunctionDefNode.is_method` is a `@property`**, not a field. Never pass `is_method=...` as kwarg.
 - **`ParseResult.language: Language`** — enum, not `.value` string. Construct with `language=Language.PYTHON`.
 - **Parameters referenced in body DO appear in `identifier_names`.** The field collects body USAGES; parameter DECLARATIONS live on `parameter_names`.
-- **elif/else/except are siblings at parent's depth.** Cognitive/cyclomatic/max_nesting/npath all depend on this invariant.
-- **RTK proxy filters merge commits from `git log` output.** Use `rtk proxy git log ...` for merge archaeology. Burned time on Slice 2 merge diagnosis when a merge commit was hidden from default output.
+- **elif/else/except/case are siblings at parent's depth.** Cognitive/cyclomatic/max_nesting/npath all depend on this invariant. `match_statement` itself is a no-cost marker; the case_clauses do the counting.
+- **`@property`/`@setter` methods now disambiguate via `[getter]`/`[setter]`/`[deleter]` suffix on `qualified_name`.** Don't normalize this away — downstream consumers and the test pin specific shapes.
+- **`ObservationStore.upsert_artifact` takes `run_id` as first arg** (PR #8 amended the Protocol). Implicit-state coupling was rejected; thread it explicitly.
+- **`try_dormant_shortcut` has a side effect** — on hit, it bumps `last_seen_run_id` / `occurrence_count` / `stability_tier` atomically with the lookup. Callers must not "check first, then bump" — that's two transactions and a race.
+- **RTK proxy filters merge commits from `git log` output.** Use `rtk proxy git log ...` for merge archaeology.
 - **Default config `suppress: [...]` includes `**/tests/**`.** Tests that operate on `tests/fixtures/` must override with `suppress: []` in their test config.
-- **Row-count tests are parametrized via `tests/_helpers.py::expected_row_count`** against `METRICS_REGISTRY`. Slice 4b did this refactor — do not re-introduce hard-coded counts in new tests. `test_cli_run.py`, `test_analyze_pipeline.py`, `tests/integration/test_slice3_pipeline.py`, `tests/integration/test_slice4a_metrics.py`, `tests/integration/test_slice4b_pipeline.py` all use the helper.
+- **Row-count tests are parametrized via `tests/_helpers.py::expected_row_count`** against `METRICS_REGISTRY`. Slice 4b did this refactor — do not re-introduce hard-coded counts.
 - **Cognitive rules YAML must be complete.** Loader raises if any `ControlFlowNodeKind` has no rule. Adding a new kind requires updating every language's YAML.
-- **Parse-layer helpers in `parse/python.py`** have grown substantial (~600 lines). `_collect_functions`, `_collect_control_flow`, `_count_statements`, `_collect_identifiers` all traverse the function body. Eventually worth refactoring to a single-pass tree visitor; not urgent.
+- **Parse-layer helpers in `parse/python.py`** have grown substantial (~900 lines after PR #7). `_collect_functions`, `_collect_control_flow`, `_count_statements`, `_collect_identifiers` all traverse the function body. Eventually worth refactoring to a single-pass tree visitor; not urgent.
+- **stdlib `sqlite3` datetime-adapter `DeprecationWarning` is filtered in `pyproject.toml`** (Python 3.12 + SQLAlchemy interaction). Don't unsuppress without a real fix.
 
 ---
 
 ## Next work
 
-### Immediate: merge PR #6
+### Immediate: merge PR #8 (Slice 5)
 
 ```bash
-gh pr merge 6 --merge
+gh pr merge 8 --merge
 git checkout master && git pull
 ```
 
-Matches Slices 1–4b merge-commit pattern.
+Matches Slices 1–4b + PR #6 + PR #7 merge-commit pattern. After merge, master test count jumps from 389 → 456 and storage becomes the active write path.
 
 ### After merge: four options
 
-**1. Slice 4c — LCOM-HS (class-level cohesion; recommended next per roadmap).**
-Deferred from Slice 4b per its Scope Decision #1. Needs method ↔ attribute-read graph extraction in the parse layer. Non-trivial; plan should flag empirical CFN/AST probe as an early task.
+**1. Slice 6 — Report generators + ranking + profile (recommended next per arch §15).**
+The natural follow-on from Slice 5: with observations now persisted, surface them. Includes:
+- `analyze/ranking.py` — `attention_priority` computation (arch §6) with confidence dampener
+- `analyze/profile.py` — per-axis percentiles + status (`normal` / `watch` / `elevated`)
+- `report/terminal.py`, `report/json.py`, `report/html.py` — the three Phase-1 renderers
+- Wires `ObservationStore.write_ranking` / `write_profile` (currently raising `NotImplementedError`)
+- Implements `ObservationQuery` read-side Protocol so renderers can pull historical context
+- Adds `dormant` stability tier transition (now that there's a consumer reading tier)
 
-**2. Parser bug-fix mini-slice (B1 / B2 / B3).**
-Tight scope, each bug has a clear fix path:
-- B1: add `match_statement` + `case_clause` + `except_group` (see also B3) to `_STATEMENT_NODE_TYPES` and `_TS_TO_CFN_KIND`; update `src/savviety_instinct/core/cognitive_rules/python.yaml`; bump metric_versions for every metric whose output changes on match-using code.
-- B2: disambiguate `qualified_name` for `@property`/`@setter` pairs in `_collect_functions` (e.g., `"Thing.name[getter]"` / `"Thing.name[setter]"`, or append line number).
-- B3: covered by B1's parse-layer fix if done together.
-When fixed, flip `xfail(strict=True)` → real assertion in `tests/test_parse_adversarial.py` (strict mode will auto-enforce this).
+**2. Slice 4c — LCOM-HS (class-level cohesion).**
+Deferred from Slice 4b per its Scope Decision #1. Needs method ↔ attribute-read graph extraction in the parse layer. Non-trivial; plan should flag empirical CFN/AST probe as an early task.
 
 **3. Graph infrastructure detour.**
 - Cross-file call resolution
@@ -179,13 +198,15 @@ When fixed, flip `xfail(strict=True)` → real assertion in `tests/test_parse_ad
 
 **4. Temporal infrastructure detour.**
 - pydriller or gix integration for git history
-- Unlocks arch §5.x (change_frequency, bug_fix_density, author_count, stability_tier)
+- Unlocks arch §5.x (change_frequency, bug_fix_density, author_count, stability_tier as a real metric)
 
 ### Deferred housekeeping (not urgent)
 
-- Fix Slice 4a `metric_version = 1.0.0` documented approximations (NPATH condition, comprehension, ternary, lambda attribution, context-blind stopwords). Coordinated parse-layer + metric-version bump — natural co-travel with option 2 above.
-- Mutation-testing baseline: previously attempted via `mutmut` 3.x, shelved due to src-layout friction. Alternatives documented in the hardening plan's mutation appendix (`mutatest`, `cosmic-ray`, `mutmut 2.x`).
-- `.claude.bak-*/` backup directories accumulate untracked on every session start. Sweep occasionally.
+- Fix Slice 4a `metric_version = 1.0.0` documented approximations (NPATH condition, comprehension, ternary, lambda attribution, context-blind stopwords). Coordinated parse-layer + metric-version bump.
+- 180-day TTL cleanup on `run_observations` (arch §8.4). Defer until there's data old enough to need it.
+- Per-metric versioning refactor — current schema has a single `metric_version` column; we work around with the combined hash. Real fix is a `metric_values` side table keyed by `(artifact_id, metric_id, metric_version)`.
+- Mutation-testing baseline: previously attempted via `mutmut` 3.x, shelved due to src-layout friction. Alternatives documented in the hardening plan's mutation appendix.
+- `read-side ObservationQuery` Protocol implementation — naturally lands with Slice 6.
 
 ---
 
@@ -193,25 +214,25 @@ When fixed, flip `xfail(strict=True)` → real assertion in `tests/test_parse_ad
 
 1. **Start with `/whereami`** in the new session.
 2. **Confirm scope with Gary before writing code** for a new slice — he expects this. HANDOFF.md's "Next work" section is my proposal; his decision overrides.
-3. **Follow the most recent slice plan's style** (Slice 4b for feature slices; test-hardening plan for cross-cutting initiatives): file-structure table, scope-decisions section, per-task TDD steps with verbatim code, self-review, execution handoff.
+3. **Follow the most recent slice plan's style.** Slice 5 (`docs/plans/2026-05-08-slice-5-storage-writes.md`) is the freshest example with a storage-layer touch; Slice 4b is the freshest pure-metric example; test-hardening plan is the freshest cross-cut.
 4. **Ground-truth fixtures before metrics.** Add expected values to `metric_fixtures.py` or a new fixture file (module-level metrics live under `tests/fixtures/python/modules/`; adversarial parser cases live under `tests/fixtures/python/adversarial/`) BEFORE implementing.
 5. **Empirical CFN inspection** when writing any metric that reads `ControlFlowNode` structure. REPL commands included in prior plan docs.
-6. **Subagent-driven execution** has worked cleanly for 4 slices. Use `superpowers:subagent-driven-development` skill for feature slices. Cross-cutting initiatives (test hardening, bug sweeps) don't need it — run tasks inline.
-7. **Merge-commit style** for slice and initiative PRs (matches Slices 1–4b). Don't squash.
-8. **When a test surfaces a real bug mid-plan, pin it with `xfail(strict=True)` rather than expanding plan scope to fix it.** Log in the plan's "Bugs Surfaced" appendix for a follow-up slice. The strict-xfail pattern auto-fails when the bug is fixed, forcing marker removal.
-9. **Feedback memory to honor:** raise locked-decision concerns, give opinion before decisions, one commit per logical change, default to "not in MVP."
+6. **Subagent-driven execution** has worked cleanly for 4 feature slices. Use `superpowers:subagent-driven-development` skill for feature slices. Cross-cutting initiatives and tight bug-fix branches can run tasks inline.
+7. **Merge-commit style** for slice and initiative PRs. Don't squash.
+8. **When a test surfaces a real bug mid-plan, pin it with `xfail(strict=True)`** rather than expanding plan scope. Log in the plan's "Bugs Surfaced" appendix.
+9. **Tests should bypass the store by default.** Metric unit tests use `analyze.pipeline.run_pipeline`; only CLI-level and explicit storage tests use `analyze.persistence.run_pipeline_with_persistence`. Don't accidentally couple a metric test to SQLite — that's a contract violation.
+10. **Feedback memory to honor:** raise locked-decision concerns, give opinion before decisions, one commit per logical change, default to "not in MVP."
 
 ---
 
 ## How to resume
 
 1. Read this file.
-2. Read `docs/01-locked-decisions.md` and `docs/04-architecture-spec.md` §2/§5/§15 if unfamiliar.
-3. Read `docs/plans/2026-04-19-slice-4b-module-metrics.md` for the most recent executed feature-slice plan (template for feature slices) and `docs/plans/2026-04-20-test-hardening-algorithmic-rigor.md` for the most recent cross-cutting initiative.
-4. Read `docs/testing.md` for the three-layer test strategy before adding any new tests.
-5. Check PR #6 state. Merge if ready.
-6. Confirm next work scope with Gary before coding (see §"Next work").
-7. Start with `/whereami` in any new session.
+2. Read `docs/01-locked-decisions.md` and `docs/04-architecture-spec.md` §2/§4/§5/§8/§15 if unfamiliar.
+3. Read `docs/plans/2026-05-08-slice-5-storage-writes.md` for the current open slice; `docs/plans/2026-04-19-slice-4b-module-metrics.md` for the most recent feature-slice template; `docs/testing.md` for test-strategy.
+4. Check PR #8 state. Merge if ready.
+5. Confirm next work scope with Gary before coding (see §"Next work").
+6. Start with `/whereami` in any new session.
 
 ---
 
