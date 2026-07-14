@@ -7,14 +7,21 @@ heuristic.
 
 Confidence: LOW (per arch §4.1 "heuristic, low confidence").
 
-KNOWN GAPS (metric_version=1.0.0):
+KNOWN GAPS (metric_version=1.1.0):
 - Context-aware exemption (e.g., `x` meaningful in math context) not implemented.
 - Idiomatic short names (`n`, `m`) treated as non-meaningful.
 - Occurrence frequency ignored; distinct names only.
+
+VERSION HISTORY:
+- 1.1.0: FunctionDefNode resolved by source_range instead of ast_hash.
+  Values change where shape-identical functions coexist in one file —
+  each function now scores from its own identifiers instead of the
+  first shape-match's.
 """
 
 from __future__ import annotations
 
+from savviety_instinct.analyze.metrics._resolve import resolve_function_node
 from savviety_instinct.core.types import (
     AnalysisContext,
     Artifact,
@@ -34,25 +41,21 @@ def _is_meaningful(identifier: str) -> bool:
 
 class IdentifierQualityMetric:
     id: str = "identifier_quality"
-    version: str = "1.0.0"
+    version: str = "1.1.0"
     applies_to: frozenset[ArtifactKind] = frozenset({ArtifactKind.FUNCTION})
     required_inputs: frozenset[InputKind] = frozenset({InputKind.AST})
 
     def compute(self, artifact: Artifact, context: AnalysisContext) -> MetricValue:
-        if context.parse_result is None:
-            raise ValueError(f"{self.id} requires AnalysisContext.parse_result")
-        for fn in context.parse_result.functions:
-            if fn.ast_hash == artifact.ast_hash:
-                all_identifiers = {fn.name} | set(fn.parameter_names) | set(fn.identifier_names)
-                meaningful = {i for i in all_identifiers if _is_meaningful(i)}
-                quality = len(meaningful) / max(len(all_identifiers), 1)
-                return MetricValue(
-                    metric_id=self.id,
-                    value=quality,
-                    metric_version=self.version,
-                    confidence=Confidence.LOW,
-                )
-        raise LookupError(f"No function with ast_hash={artifact.ast_hash!r} in parse_result")
+        fn = resolve_function_node(self.id, artifact, context)
+        all_identifiers = {fn.name} | set(fn.parameter_names) | set(fn.identifier_names)
+        meaningful = {i for i in all_identifiers if _is_meaningful(i)}
+        quality = len(meaningful) / max(len(all_identifiers), 1)
+        return MetricValue(
+            metric_id=self.id,
+            value=quality,
+            metric_version=self.version,
+            confidence=Confidence.LOW,
+        )
 
 
 IDENTIFIER_QUALITY_METRIC = IdentifierQualityMetric()

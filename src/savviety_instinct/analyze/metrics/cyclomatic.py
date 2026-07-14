@@ -21,6 +21,7 @@ Fix in a later metric_version bump with finer-grained ControlFlowNode fields.
 
 from __future__ import annotations
 
+from savviety_instinct.analyze.metrics._resolve import resolve_function_node
 from savviety_instinct.core.types import (
     AnalysisContext,
     Artifact,
@@ -63,20 +64,13 @@ class CyclomaticMetric:
     required_inputs: frozenset[InputKind] = frozenset({InputKind.AST})
 
     def compute(self, artifact: Artifact, context: AnalysisContext) -> MetricValue:
-        if context.parse_result is None:
-            raise ValueError(f"{self.id} requires AnalysisContext.parse_result to be populated.")
-        for fn in context.parse_result.functions:
-            if fn.ast_hash == artifact.ast_hash:
-                value = _count_decisions(fn.control_flow) + 1
-                return MetricValue(
-                    metric_id=self.id,
-                    value=value,
-                    metric_version=self.version,
-                    confidence=Confidence.HIGH,
-                )
-        raise LookupError(
-            f"No FunctionDefNode with ast_hash={artifact.ast_hash!r} found in "
-            f"parse_result.functions (file={context.parse_result.file_path!r})"
+        fn = resolve_function_node(self.id, artifact, context)
+        value = _count_decisions(fn.control_flow) + 1
+        return MetricValue(
+            metric_id=self.id,
+            value=value,
+            metric_version=self.version,
+            confidence=Confidence.HIGH,
         )
 
 
