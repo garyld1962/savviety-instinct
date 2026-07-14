@@ -66,7 +66,7 @@ def test_identifier_quality_matches_fixture(metric_fixtures_result, qualified, e
 
 def test_identifier_quality_metadata() -> None:
     assert IDENTIFIER_QUALITY_METRIC.id == "identifier_quality"
-    assert IDENTIFIER_QUALITY_METRIC.version == "1.0.0"
+    assert IDENTIFIER_QUALITY_METRIC.version == "1.1.0"
     assert IDENTIFIER_QUALITY_METRIC.applies_to == frozenset({ArtifactKind.FUNCTION})
     assert IDENTIFIER_QUALITY_METRIC.required_inputs == frozenset({InputKind.AST})
 
@@ -89,3 +89,33 @@ def test_identifier_quality_raises_without_parse_result(metric_fixtures_result) 
     artifact = _artifact_for(metric_fixtures_result, "single_if")
     with pytest.raises(ValueError, match="parse_result"):
         IDENTIFIER_QUALITY_METRIC.compute(artifact, AnalysisContext())
+
+
+# Identical AST shape (ast_hash is identifier-blind), opposite naming quality.
+SHAPE_COLLISION_SOURCE = b"""\
+def compute_invoice_total(invoice_line_items, tax_rate):
+    running_total = 0
+    for line_item in invoice_line_items:
+        running_total = running_total + line_item
+    return running_total * tax_rate
+
+
+def f(a, b):
+    x = 0
+    for q in a:
+        x = x + q
+    return x * b
+"""
+
+
+def test_shape_identical_functions_score_from_own_identifiers() -> None:
+    """ast_hash is not a per-occurrence identity: two functions with the same
+    shape must each be scored from their OWN identifiers. Regression for the
+    hash-based FunctionDefNode lookup returning the first shape-match for both."""
+    result = PYTHON_ADAPTER.parse_source(SHAPE_COLLISION_SOURCE, "collision.py")
+    good = _artifact_for(result, "compute_invoice_total")
+    bad = _artifact_for(result, "f")
+    assert good.ast_hash == bad.ast_hash, "precondition: genuine shape collision"
+    ctx = AnalysisContext(parse_result=result)
+    assert IDENTIFIER_QUALITY_METRIC.compute(good, ctx).value == pytest.approx(1.0)
+    assert IDENTIFIER_QUALITY_METRIC.compute(bad, ctx).value == pytest.approx(0.0)

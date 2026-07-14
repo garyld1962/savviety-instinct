@@ -8,6 +8,7 @@ don't change indentation, aren't what §1.4 targets.
 
 from __future__ import annotations
 
+from savviety_instinct.analyze.metrics._resolve import resolve_function_node
 from savviety_instinct.core.types import (
     AnalysisContext,
     Artifact,
@@ -50,17 +51,13 @@ class MaxNestingDepthMetric:
     required_inputs: frozenset[InputKind] = frozenset({InputKind.AST})
 
     def compute(self, artifact: Artifact, context: AnalysisContext) -> MetricValue:
-        if context.parse_result is None:
-            raise ValueError(f"{self.id} requires AnalysisContext.parse_result")
-        for fn in context.parse_result.functions:
-            if fn.ast_hash == artifact.ast_hash:
-                return MetricValue(
-                    metric_id=self.id,
-                    value=_max_depth(fn.control_flow),
-                    metric_version=self.version,
-                    confidence=Confidence.HIGH,
-                )
-        raise LookupError(f"No function with ast_hash={artifact.ast_hash!r} in parse_result")
+        fn = resolve_function_node(self.id, artifact, context)
+        return MetricValue(
+            metric_id=self.id,
+            value=_max_depth(fn.control_flow),
+            metric_version=self.version,
+            confidence=Confidence.HIGH,
+        )
 
 
 MAX_NESTING_DEPTH_METRIC = MaxNestingDepthMetric()

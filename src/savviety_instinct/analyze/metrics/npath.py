@@ -24,6 +24,7 @@ KNOWN GAPS (metric_version=1.0.0):
 
 from __future__ import annotations
 
+from savviety_instinct.analyze.metrics._resolve import resolve_function_node
 from savviety_instinct.core.types import (
     AnalysisContext,
     Artifact,
@@ -187,17 +188,13 @@ class NPathMetric:
     required_inputs: frozenset[InputKind] = frozenset({InputKind.AST})
 
     def compute(self, artifact: Artifact, context: AnalysisContext) -> MetricValue:
-        if context.parse_result is None:
-            raise ValueError(f"{self.id} requires AnalysisContext.parse_result")
-        for fn in context.parse_result.functions:
-            if fn.ast_hash == artifact.ast_hash:
-                return MetricValue(
-                    metric_id=self.id,
-                    value=_npath_of_children(fn.control_flow),
-                    metric_version=self.version,
-                    confidence=Confidence.HIGH,
-                )
-        raise LookupError(f"No function with ast_hash={artifact.ast_hash!r} in parse_result")
+        fn = resolve_function_node(self.id, artifact, context)
+        return MetricValue(
+            metric_id=self.id,
+            value=_npath_of_children(fn.control_flow),
+            metric_version=self.version,
+            confidence=Confidence.HIGH,
+        )
 
 
 NPATH_METRIC = NPathMetric()

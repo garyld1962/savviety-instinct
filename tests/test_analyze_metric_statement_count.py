@@ -88,8 +88,8 @@ def test_statement_count_raises_without_parse_result(metric_fixtures_result) -> 
 
 
 def test_statement_count_raises_when_artifact_not_found(metric_fixtures_result) -> None:
-    """If the artifact's ast_hash doesn't match anything in parse_result.functions,
-    the metric raises rather than silently returning 0.
+    """If the artifact's source_range doesn't match anything in
+    parse_result.functions, the metric raises rather than silently returning 0.
     """
     artifact = Artifact(
         ast_hash="nonexistent_hash",
@@ -100,5 +100,5 @@ def test_statement_count_raises_when_artifact_not_found(metric_fixtures_result) 
         source_range=SourceRange(file_path="x.py", line_start=1, line_end=1),
     )
     ctx = AnalysisContext(parse_result=metric_fixtures_result)
-    with pytest.raises(LookupError, match="ast_hash"):
+    with pytest.raises(LookupError, match="source_range"):
         STATEMENT_COUNT_METRIC.compute(artifact, ctx)
