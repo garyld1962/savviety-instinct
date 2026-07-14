@@ -170,6 +170,11 @@ class SQLAlchemyObservationStore:
         `(ast_hash, language, metric_version)` already exists for the
         current run's combined `metric_version`.
 
+        The row is keyed on identifier-blind shape, so callers must pass
+        only shape-invariant metrics (`Metric.shape_invariant`);
+        per-occurrence values persisted here would be served to every
+        shape-identical occurrence by `try_dormant_shortcut`.
+
         On insert:
             occurrence_count = 1, stability_tier = 'volatile'.
         On update:
@@ -281,14 +286,16 @@ class SQLAlchemyObservationStore:
             - bump occurrence_count, last_seen_run_id, and stability_tier
               atomically with the lookup
             - return (artifact_id, cached_metrics) parsed from
-              metrics_json. Caller skips metric computation entirely.
+              metrics_json. Cached metrics are shape-invariant only;
+              the caller recomputes non-shape-invariant metrics
+              (`Metric.shape_invariant is False`) per occurrence.
 
         On miss: return None. Caller computes metrics and calls
         upsert_artifact + record_observation as the cold path.
 
         This is the substrate for the NFR-7 (≤15s re-run) target:
-        skipping metric computation on stable artifacts is the dominant
-        optimization on mature codebases.
+        skipping shape-invariant metric computation on stable artifacts
+        is the dominant optimization on mature codebases.
         """
         with self._engine.begin() as conn:
             run_row = conn.execute(

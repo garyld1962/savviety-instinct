@@ -5,8 +5,15 @@ storage knowledge — preserved so unit tests of metrics keep bypassing
 the DB. This wrapper composes `run_pipeline`'s machinery with the store
 and adds the dormant-artifact shortcut (arch §8.2): on artifacts whose
 `(ast_hash, language, combined_metric_version)` already exist, skip
-metric computation entirely and yield the cached metric values
-straight from the row.
+shape-invariant metric computation and yield the cached values straight
+from the row.
+
+ast_hash is identifier/literal-blind, so the artifact row represents a
+SHAPE, not a code location. Metrics with `shape_invariant=False`
+(identifier_quality, trivial_delegation_ratio) are excluded from the
+row's metrics_json and recomputed per occurrence on both paths —
+serving them from a shape-keyed cache returns another occurrence's (or
+an earlier rename's) values.
 
 Per Slice 5 Scope #5, `context_hash` is partial: derived from
 `(language, enclosing_class_or_empty, caller_count, callee_count)`.
@@ -215,18 +222,31 @@ def run_pipeline_with_persistence(
                 ctx = AnalysisContext(parse_result=result)
                 for artifact in [module_artifact, *function_artifacts]:
                     location = _file_location(artifact, result)
+                    applicable = [
+                        metric for metric in METRICS_REGISTRY if artifact.kind in metric.applies_to
+                    ]
                     shortcut = store.try_dormant_shortcut(
                         run_id, artifact.ast_hash, artifact.language.value
                     )
                     if shortcut is not None:
+                        # Cached values are shape-invariant only; the rest are
+                        # per-occurrence and computed fresh for THIS location.
                         artifact_id, metrics = shortcut
-                    else:
-                        metrics = [
+                        metrics = metrics + [
                             metric.compute(artifact, ctx)
-                            for metric in METRICS_REGISTRY
-                            if artifact.kind in metric.applies_to
+                            for metric in applicable
+                            if not metric.shape_invariant
                         ]
-                        artifact_id = store.upsert_artifact(run_id, artifact, metrics)
+                    else:
+                        computed = [
+                            (metric, metric.compute(artifact, ctx)) for metric in applicable
+                        ]
+                        metrics = [value for _, value in computed]
+                        artifact_id = store.upsert_artifact(
+                            run_id,
+                            artifact,
+                            [value for metric, value in computed if metric.shape_invariant],
+                        )
                     store.record_observation(run_id, artifact_id, location)
                     for m in metrics:
                         yield artifact, m
