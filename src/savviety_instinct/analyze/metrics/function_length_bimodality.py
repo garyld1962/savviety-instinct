@@ -68,6 +68,7 @@ class FunctionLengthBimodalityMetric:
     version: str = "1.0.0"
     applies_to: frozenset[ArtifactKind] = frozenset({ArtifactKind.MODULE})
     required_inputs: frozenset[InputKind] = frozenset({InputKind.AST})
+    shape_invariant: bool = True
 
     def compute(self, artifact: Artifact, context: AnalysisContext) -> MetricValue:
         if context.parse_result is None:

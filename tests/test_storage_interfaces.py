@@ -97,9 +97,15 @@ class _FakeStore:
     def complete_run(self, run_id: int, status: RunStatus) -> None:
         _ = (run_id, status)
 
-    def upsert_artifact(self, artifact: Artifact, metrics: list[MetricValue]) -> int:
-        _ = (artifact, metrics)
+    def upsert_artifact(self, run_id: int, artifact: Artifact, metrics: list[MetricValue]) -> int:
+        _ = (run_id, artifact, metrics)
         return 1
+
+    def try_dormant_shortcut(
+        self, run_id: int, ast_hash: str, language: str
+    ) -> tuple[int, list[MetricValue]] | None:
+        _ = (run_id, ast_hash, language)
+        return None
 
     def record_observation(self, run_id: int, artifact_id: int, location: FileLocation) -> None:
         _ = (run_id, artifact_id, location)
@@ -157,6 +163,7 @@ def test_begin_run_roundtrip():
 def test_upsert_artifact_returns_id():
     store = _FakeStore()
     aid = store.upsert_artifact(
+        1,  # run_id
         _sample_artifact(),
         [
             MetricValue(
@@ -180,9 +187,17 @@ def test_observation_store_rejects_missing_method():
         def complete_run(self, run_id: int, status: RunStatus) -> None:
             _ = (run_id, status)
 
-        def upsert_artifact(self, artifact: Artifact, metrics: list[MetricValue]) -> int:
-            _ = (artifact, metrics)
+        def upsert_artifact(
+            self, run_id: int, artifact: Artifact, metrics: list[MetricValue]
+        ) -> int:
+            _ = (run_id, artifact, metrics)
             return 0
+
+        def try_dormant_shortcut(
+            self, run_id: int, ast_hash: str, language: str
+        ) -> tuple[int, list[MetricValue]] | None:
+            _ = (run_id, ast_hash, language)
+            return None
 
         def record_observation(self, run_id: int, artifact_id: int, location: FileLocation) -> None:
             _ = (run_id, artifact_id, location)

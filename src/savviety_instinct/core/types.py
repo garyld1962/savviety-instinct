@@ -92,5 +92,11 @@ class Metric(Protocol):
     version: str
     applies_to: frozenset[ArtifactKind]
     required_inputs: frozenset[InputKind]
+    # True when the value is fully determined by the identifier/literal-blind
+    # AST shape that ast_hash captures (arch §4.2). False for metrics that
+    # read identifier text (e.g. identifier_quality, delegation classification):
+    # their values are per-occurrence and MUST NOT be served from any cache or
+    # store row keyed on ast_hash — shape-identical code can score differently.
+    shape_invariant: bool
 
     def compute(self, artifact: Artifact, context: AnalysisContext) -> MetricValue: ...

@@ -186,6 +186,7 @@ class NPathMetric:
     version: str = "1.0.0"
     applies_to: frozenset[ArtifactKind] = frozenset({ArtifactKind.FUNCTION})
     required_inputs: frozenset[InputKind] = frozenset({InputKind.AST})
+    shape_invariant: bool = True
 
     def compute(self, artifact: Artifact, context: AnalysisContext) -> MetricValue:
         fn = resolve_function_node(self.id, artifact, context)

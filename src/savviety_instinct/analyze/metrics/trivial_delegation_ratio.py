@@ -38,6 +38,10 @@ class TrivialDelegationRatioMetric:
     version: str = "1.0.0"
     applies_to: frozenset[ArtifactKind] = frozenset({ArtifactKind.MODULE})
     required_inputs: frozenset[InputKind] = frozenset({InputKind.AST})
+    # delegation_kind classification matches argument identifiers against
+    # parameter names — identifier text ast_hash deliberately omits. Two
+    # shape-identical modules can differ. Never cache by shape.
+    shape_invariant: bool = False
 
     def compute(self, artifact: Artifact, context: AnalysisContext) -> MetricValue:
         if context.parse_result is None:

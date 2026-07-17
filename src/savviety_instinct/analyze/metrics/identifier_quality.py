@@ -44,6 +44,9 @@ class IdentifierQualityMetric:
     version: str = "1.1.0"
     applies_to: frozenset[ArtifactKind] = frozenset({ArtifactKind.FUNCTION})
     required_inputs: frozenset[InputKind] = frozenset({InputKind.AST})
+    # Reads identifier text, which ast_hash deliberately omits: two
+    # shape-identical functions can score differently. Never cache by shape.
+    shape_invariant: bool = False
 
     def compute(self, artifact: Artifact, context: AnalysisContext) -> MetricValue:
         fn = resolve_function_node(self.id, artifact, context)

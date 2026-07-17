@@ -87,6 +87,7 @@ def test_metric_protocol_accepts_complete_implementation():
         version = "0.0.0"
         applies_to: frozenset[ArtifactKind] = frozenset({ArtifactKind.FUNCTION})
         required_inputs: frozenset[InputKind] = frozenset({InputKind.AST})
+        shape_invariant: bool = True
 
         def compute(self, artifact: Artifact, context: AnalysisContext) -> MetricValue:
             return MetricValue(

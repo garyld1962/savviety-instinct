@@ -82,6 +82,13 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --cov=savviety_instinct --cov-report=term-missing"
+filterwarnings = [
+    # stdlib sqlite3 datetime adapter deprecated in Python 3.12 — surfaces
+    # via SQLAlchemy passing datetime through to the default adapter.
+    # Tracked upstream; suppress until we either move off stdlib sqlite3 or
+    # SQLAlchemy ships a built-in shim.
+    "ignore:The default datetime adapter is deprecated:DeprecationWarning",
+]
 
 [tool.coverage.run]
 source = ["savviety_instinct"]
