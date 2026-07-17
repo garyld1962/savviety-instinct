@@ -2,8 +2,8 @@
 
 **Purpose:** enable a fresh Claude Code session (or a returning Gary) to resume without reconstructing context from git log + memory.
 
-**Last updated:** 2026-05-11
-**State at handoff:** Slices 1–4b on master, plus the cross-cutting test-hardening initiative (PR #6) and the parser-bug fixes (PR #7) for B1/B2/B3. **Slice 5 (observation store writes + dormant shortcut) is OPEN as PR #8** — six commits, 456 tests passing on the branch, awaiting review/merge.
+**Last updated:** 2026-07-17
+**State at handoff:** Slices 1–5 on master, plus test hardening (PR #6), parser-bug fixes (PR #7), and the ast_hash-identity fixes (PR #9 + PR #8's storage half). **Slice 5 merged as PR #8** — storage is the active write path. 461 tests passing on master. Next: Slice 6 (reports + ranking + profile), pending scope confirmation with Gary.
 
 ---
 
@@ -31,16 +31,16 @@ Then:
 ## Quick-start: "I just sat down, what do I do?"
 
 1. `/whereami` — branch state, open PRs, last session context
-2. Check https://github.com/garyld1962/savviety-instinct/pulls — is PR #8 still open?
-3. If yes, review/merge it (see §"Next work" for merge command and post-merge options).
-4. If no, refresh this doc from `git log master --oneline -10` + `gh pr list --state all --limit 5`.
+2. Check https://github.com/garyld1962/savviety-instinct/pulls — anything open?
+3. No open PRs at handoff time. Next work is Slice 6 (see §"Next work") — confirm scope with Gary before coding.
+4. If this doc looks stale, refresh from `git log master --oneline -10` + `gh pr list --state all --limit 5`.
 
 ---
 
 ## Project state
 
 - **8 source modules populated** per arch §2 layout: `core/`, `storage/`, `config/`, `cli/`, `parse/`, `graph/`, `analyze/`. Reserved skeletons (`llm/`, `curate/`, `patterns/`, `suggest/`, `mcp/`, `report/`) are empty `__init__.py` stubs.
-- **Test count: 389 passed on master tip (`424c55e`); 456 passed on `slice-5-storage-writes` (PR #8 head).** Coverage 90% (TOTAL). `parse/python.py` at 91% line coverage; storage modules between 87% and 100% on the slice-5 branch.
+- **Test count: 461 passed on master tip (`2f97c95`).** Coverage 91% (TOTAL). `parse/python.py` at 91% line coverage; storage modules between 87% and 100%.
 - **PR cadence:** one PR per slice from arch §15. Merge-commit style (not squash). Branches live after merge — not deleted. Non-slice initiatives (test hardening, bug sweeps) get their own plan doc under `docs/plans/` and follow the same merge-commit flow.
 - **Python 3.12+**, `uv`-managed (no pip/poetry/pyenv). Typer CLI. Pydantic v2 config. SQLAlchemy 2 + Alembic for the SQLite schema — **active writer in Slice 5** (PR #8).
 
@@ -56,8 +56,10 @@ Then:
 | Slice 4b | Module metrics: `trivial_delegation_ratio`, `median_function_length`, `function_length_bimodality`; first `ArtifactKind.MODULE` pipeline dispatch; `DelegationKind` enum; registry-duplication collapse | PR #5 (`2a40ae7`) |
 | Test hardening | Cross-cutting: 26 adversarial parse fixtures, 9 hypothesis invariants, 57 differential tests (cyclomatic vs `radon`, cognitive vs `cognitive_complexity` pkg), `docs/testing.md`. Surfaced bugs B1/B2/B3. | PR #6 (`da8b4c4`) |
 | Parser bug fixes | B1 (`match` / `case_clause`), B2 (`@property`/`@setter` qualified_name collision via `[getter]`/`[setter]`/`[deleter]` suffix), B3 (`except_group_clause`). Metric versions: `cyclomatic`, `cognitive`, `statement_count` → 1.2.0. | PR #7 (`424c55e`) |
+| ast_hash identity fix | `ast_hash` is identifier-blind and was wrongly used as a per-occurrence identity. Metric lookup now via `_resolve.py::resolve_function_node()` keyed on `source_range`; `identifier_quality` → 1.1.0. | PR #9 (`8b8dfc1`) |
+| Slice 5 | Observation store writes + dormant shortcut (see below); includes the storage half of the ast_hash fix (`Metric.shape_invariant`, commit `2f97c95`) | PR #8 |
 
-### Active — Slice 5 (PR #8, branch `slice-5-storage-writes`)
+### Slice 5 detail (merged)
 
 Observation store writes. Closes the "Accumulate" half of the MVP per arch §4.1 / §8.2 / D10.
 
@@ -65,7 +67,7 @@ Observation store writes. Closes the "Accumulate" half of the MVP per arch §4.1
 - **`storage/fingerprint.py:derive_repo_fingerprint(cwd)`** — three-tier (first-commit SHA → origin URL → synthetic hostname:abspath). Source label written to `runs.repo_fingerprint_source`.
 - **`storage/run_meta.py`** — `compute_config_hash`, `compute_combined_metric_version` (compact `mv_<sha12>` hash of sorted `id:version` pairs — Scope #2), `derive_git_commit_branch`.
 - **`analyze/persistence.py:run_pipeline_with_persistence(path, config, store)`** — wraps `analyze.pipeline.run_pipeline`'s machinery with the store and adds the dormant-artifact shortcut. Bare `run_pipeline` stays storage-free so existing unit tests keep bypassing the DB.
-- **Dormant shortcut**: `ObservationStore.try_dormant_shortcut(run_id, ast_hash, language)` returns `(artifact_id, cached_metrics) | None`. On hit, bumps `last_seen_run_id` / `occurrence_count` / `stability_tier` atomically and the wrapper yields cached metrics; the metric layer is not re-entered. Proven by a compute-call spy on `CYCLOMATIC_METRIC` in `tests/integration/test_re_run.py`.
+- **Dormant shortcut**: `ObservationStore.try_dormant_shortcut(run_id, ast_hash, language)` returns `(artifact_id, cached_metrics) | None`. On hit, bumps `last_seen_run_id` / `occurrence_count` / `stability_tier` atomically and the wrapper yields cached metrics for **shape-invariant metrics only** (`Metric.shape_invariant`); `identifier_quality` and `trivial_delegation_ratio` are recomputed per occurrence and never enter `metrics_json` (they read identifier text, which ast_hash omits). Proven by a compute-call spy on `CYCLOMATIC_METRIC` in `tests/integration/test_re_run.py` plus `tests/integration/test_shape_invariant_metrics.py`.
 - **`stability_tier` minimal** (Scope #3): `volatile` → `settled` at `occurrence_count >= 2`. `dormant` deferred to Slice 6.
 - **`context_hash` partial** (Scope #5): `sha256(language|enclosing_class|caller_count|callee_count)`. R2 extends per D6.
 - **CLI wired**: `instinct run` opens the store at `<cwd>/.instinct/instinct.db`, calls the persistence wrapper. Stdout output unchanged from Slice 3.
@@ -93,10 +95,12 @@ These are encoded in code; listed here so a fresh agent doesn't reinvent them:
 `core` → `config / storage / parse / graph / analyze / cli` hierarchy is absolute. `core.types.AnalysisContext` references `CallGraph` and `ParseResult` via `TYPE_CHECKING` + quoted string annotations — no runtime import. Verified by a `sys.modules` assertion in tests.
 
 ### Storage model (D10 + Slice 5)
-SQLite per-repo at `.instinct/instinct.db` is canonical. Postgres warehouse reserved as a one-way derived view (R2+). `repo_fingerprint` column on `runs` and `observation_artifacts` carries repo identity for warehouse aggregation. **Slice 5 (PR #8 open) is the first writer:** `instinct run` persists `runs` + `observation_artifacts` + `run_observations` with full dormant-artifact dedup. `rankings` and `run_profiles` tables exist but stay empty until Slice 6.
+SQLite per-repo at `.instinct/instinct.db` is canonical. Postgres warehouse reserved as a one-way derived view (R2+). `repo_fingerprint` column on `runs` and `observation_artifacts` carries repo identity for warehouse aggregation. **Slice 5 (PR #8, merged) is the first writer:** `instinct run` persists `runs` + `observation_artifacts` + `run_observations` with full dormant-artifact dedup. `rankings` and `run_profiles` tables exist but stay empty until Slice 6.
 
 ### `ast_hash` (arch §4.2, D6)
 `blake3` preferred, `xxhash` fallback at import time. `HASH_ALGORITHM` constant records backend. Normalization is **whitespace-only** — tree-sitter's `str(node)` natively omits identifier text and literal values (discovered empirically during Slice 2 code review). The hash is shape-invariant across identifier/literal changes without any normalizer work.
+
+**Consequence (PR #9): ast_hash is NOT a per-occurrence identity.** Shape-identical functions (e.g. delegation wrappers) share a hash. Anything keyed on ast_hash may only carry shape-determined data; per-occurrence lookups go through `source_range`, and per-occurrence metric values (`Metric.shape_invariant is False`) are never served from shape-keyed caches.
 
 ### Combined `metric_version` (Slice 5 Scope #2)
 The schema's single `metric_version` column on `runs` and `observation_artifacts` predates the multi-metric reality. Slice 5 computes a per-run `mv_<sha12>` hash of every registered metric's `id:version` pair (sorted, joined by `|`). Adding or bumping any metric changes the combined version, naturally invalidating dedup at the previous version — old rows stay inert. Refactor to per-metric versioning is out of MVP scope.
@@ -111,13 +115,13 @@ Domain-neutral nodes (IF/ELIF/ELSE/FOR/WHILE/TRY/EXCEPT/MATCH/CASE/TERNARY/BOOLE
 `src/savviety_instinct/core/cognitive_rules/python.yaml` — per-language increment table. Cognitive metric tracks cumulative nesting via `rule.increments_nesting` (NOT parse-level `ControlFlowNode.nesting_depth`), keeping parser rule-agnostic. Loader fails fast if any `ControlFlowNodeKind` has no rule — forces coordinated enum + YAML updates.
 
 ### Metric pattern
-Each metric class lives in `src/savviety_instinct/analyze/metrics/<name>.py` exporting a module-level singleton `<NAME>_METRIC`. Metrics conform to `core.types.Metric` Protocol (Slice 1). `Metric.compute(artifact, context)` looks up the `FunctionDefNode` in `context.parse_result.functions` by `ast_hash` — O(N) per metric per artifact.
+Each metric class lives in `src/savviety_instinct/analyze/metrics/<name>.py` exporting a module-level singleton `<NAME>_METRIC`. Metrics conform to `core.types.Metric` Protocol (Slice 1), including the `shape_invariant: bool` attribute (PR #8). Function metrics look up their `FunctionDefNode` via `metrics/_resolve.py::resolve_function_node()` keyed on `source_range` (PR #9 — never by `ast_hash`; shape collisions) — O(N) per metric per artifact.
 
 ### qualified_name disambiguator (PR #7 / B2)
 `_collect_functions` inspects each function's `decorated_definition` parent. `@property` → `[getter]` suffix; `@<name>.setter` → `[setter]`; `@<name>.deleter` → `[deleter]`. Other duplicates fall back to `@L<line>`. Pinned by `test_decorator_stack_property_setter_disambiguated`.
 
 ### Persistence wrapper (Slice 5)
-`analyze.persistence.run_pipeline_with_persistence(path, config, store)` is the only entry point that touches the DB. `analyze.pipeline.run_pipeline` stays a pure generator so metric unit tests keep bypassing storage. The dormant-shortcut path (`try_dormant_shortcut`) yields cached metrics straight from `metrics_json`, never re-entering the metric layer. Compute-call spy in `tests/integration/test_re_run.py` enforces the optimization.
+`analyze.persistence.run_pipeline_with_persistence(path, config, store)` is the only entry point that touches the DB. `analyze.pipeline.run_pipeline` stays a pure generator so metric unit tests keep bypassing storage. The dormant-shortcut path (`try_dormant_shortcut`) yields cached shape-invariant metrics straight from `metrics_json` and recomputes the non-shape-invariant ones per occurrence. Compute-call spy in `tests/integration/test_re_run.py` enforces the optimization.
 
 ### Registry (single source)
 `METRICS_REGISTRY` lives in `src/savviety_instinct/analyze/__init__.py` and is the single source of truth. Slice 4b deleted the duplicate `_METRICS` tuple from `pipeline.py`. Adding a new metric now requires one registry update. Module-load-time `assert` guards against a metric with an empty `applies_to`.
@@ -157,6 +161,8 @@ Per-task subagent dispatch (from `superpowers:subagent-driven-development`) with
 - **`@property`/`@setter` methods now disambiguate via `[getter]`/`[setter]`/`[deleter]` suffix on `qualified_name`.** Don't normalize this away — downstream consumers and the test pin specific shapes.
 - **`ObservationStore.upsert_artifact` takes `run_id` as first arg** (PR #8 amended the Protocol). Implicit-state coupling was rejected; thread it explicitly.
 - **`try_dormant_shortcut` has a side effect** — on hit, it bumps `last_seen_run_id` / `occurrence_count` / `stability_tier` atomically with the lookup. Callers must not "check first, then bump" — that's two transactions and a race.
+- **`metrics_json` carries shape-invariant metrics ONLY.** `identifier_quality` and `trivial_delegation_ratio` are per-occurrence (identifier-dependent) and are recomputed on every path — they are not persisted anywhere yet. Slice 6 ranking must not expect them in the store; persisting them properly needs the per-metric side table (see deferred housekeeping). Any new metric MUST declare `shape_invariant` honestly — a wrong `True` silently revives the stale-cache bug.
+- **Never key per-occurrence data on `ast_hash`.** Shape-identical functions share a hash (delegation wrappers especially). Function lookup identity is `source_range`; residual corner: two lambdas on one line still collide (line-based ranges).
 - **RTK proxy filters merge commits from `git log` output.** Use `rtk proxy git log ...` for merge archaeology.
 - **Default config `suppress: [...]` includes `**/tests/**`.** Tests that operate on `tests/fixtures/` must override with `suppress: []` in their test config.
 - **Row-count tests are parametrized via `tests/_helpers.py::expected_row_count`** against `METRICS_REGISTRY`. Slice 4b did this refactor — do not re-introduce hard-coded counts.
@@ -168,16 +174,7 @@ Per-task subagent dispatch (from `superpowers:subagent-driven-development`) with
 
 ## Next work
 
-### Immediate: merge PR #8 (Slice 5)
-
-```bash
-gh pr merge 8 --merge
-git checkout master && git pull
-```
-
-Matches Slices 1–4b + PR #6 + PR #7 merge-commit pattern. After merge, master test count jumps from 389 → 456 and storage becomes the active write path.
-
-### After merge: four options
+PR #8 merged 2026-07-17; storage is the active write path. Four options, in recommended order:
 
 **1. Slice 6 — Report generators + ranking + profile (recommended next per arch §15).**
 The natural follow-on from Slice 5: with observations now persisted, surface them. Includes:
@@ -204,7 +201,7 @@ Deferred from Slice 4b per its Scope Decision #1. Needs method ↔ attribute-rea
 
 - Fix Slice 4a `metric_version = 1.0.0` documented approximations (NPATH condition, comprehension, ternary, lambda attribution, context-blind stopwords). Coordinated parse-layer + metric-version bump.
 - 180-day TTL cleanup on `run_observations` (arch §8.4). Defer until there's data old enough to need it.
-- Per-metric versioning refactor — current schema has a single `metric_version` column; we work around with the combined hash. Real fix is a `metric_values` side table keyed by `(artifact_id, metric_id, metric_version)`.
+- Per-metric versioning refactor — current schema has a single `metric_version` column; we work around with the combined hash. Real fix is a `metric_values` side table keyed by `(artifact_id, metric_id, metric_version)`. **Priority raised by the shape_invariant split:** non-shape-invariant metrics are currently not persisted at all, and R2's comprehensibility metrics (`name_body_drift` etc.) will all be non-shape-invariant — the side table (keyed per occurrence, not per shape) becomes load-bearing before R2.
 - Mutation-testing baseline: previously attempted via `mutmut` 3.x, shelved due to src-layout friction. Alternatives documented in the hardening plan's mutation appendix.
 - `read-side ObservationQuery` Protocol implementation — naturally lands with Slice 6.
 
@@ -229,10 +226,9 @@ Deferred from Slice 4b per its Scope Decision #1. Needs method ↔ attribute-rea
 
 1. Read this file.
 2. Read `docs/01-locked-decisions.md` and `docs/04-architecture-spec.md` §2/§4/§5/§8/§15 if unfamiliar.
-3. Read `docs/plans/2026-05-08-slice-5-storage-writes.md` for the current open slice; `docs/plans/2026-04-19-slice-4b-module-metrics.md` for the most recent feature-slice template; `docs/testing.md` for test-strategy.
-4. Check PR #8 state. Merge if ready.
-5. Confirm next work scope with Gary before coding (see §"Next work").
-6. Start with `/whereami` in any new session.
+3. Read `docs/plans/2026-05-08-slice-5-storage-writes.md` for the freshest storage-touching slice plan; `docs/plans/2026-04-19-slice-4b-module-metrics.md` for the most recent feature-slice template; `docs/testing.md` for test-strategy.
+4. Confirm next work scope with Gary before coding (see §"Next work").
+5. Start with `/whereami` in any new session.
 
 ---
 
