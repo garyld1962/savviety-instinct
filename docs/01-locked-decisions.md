@@ -110,7 +110,7 @@ include_in_cross_project: false
 llm_backend: local | ollama | anthropic | disabled
 ```
 
-**Rationale:** JMA work must never leak into the personal pattern library or out to remote APIs. This is a hard product requirement, not an operational preference.
+**Rationale:** Client work must never leak into the personal pattern library or out to remote APIs. This is a hard product requirement, not an operational preference.
 
 ---
 
@@ -169,7 +169,7 @@ Repos declare their scope explicitly. Default scoping rules:
 | Scope value | Cross-project inclusion | Tier 2 promotion eligible | Remote APIs default | Notes |
 |---|---|---|---|---|
 | `personal` | opt-in (default: false) | yes (default: true) | false | Default for new personal repos |
-| `corporate` | never (hard no) | never | false (hard no) | JMA repos land here |
+| `corporate` | never (hard no) | never | false (hard no) | Client repos land here |
 | `open-source` | opt-in (default: false) | opt-in (default: false) | opt-in (default: false) | Potentially public analysis data |
 
 **Repos must declare scope.** Missing `scope:` in config is an error, not a default. This forces the decision explicitly rather than letting corporate code silently flow into personal analyses.
@@ -199,7 +199,7 @@ Three concepts were previously all called "tiers." Rename permanently:
 **R2+ aggregation (reserved, not built in MVP):** an optional one-way push to a central Postgres warehouse via `instinct sync`. The warehouse is a derived view, never authoritative, and never read by `instinct run`. This reserves the ability to answer cross-project questions ("is my code getting more complex across all my projects?") without paying for network-dependent infrastructure in the MVP.
 
 **Why hybrid, not Postgres-only:**
-- `instinct run` must work on a developer workstation with no network — Lestrade in a coffee shop, Sherlock when Mycroft is down. Requiring Postgres for basic analysis is a regression against the local-first framing.
+- `instinct run` must work on a developer workstation with no network — a laptop in a coffee shop, a workstation when the home server is down. Requiring Postgres for basic analysis is a regression against the local-first framing.
 - Corporate isolation is stronger when canonical data is a file in the repo than when it's a row-level discipline in a shared database. Physical separation by default.
 
 **Why not SQLite-only:** cross-project rollups in R2+ would otherwise require either a SQLite-file aggregator (annoying) or a full migration to Postgres (expensive). Committing to Option C now is a cheap design tweak; deferring it later is a rework.
@@ -211,7 +211,7 @@ Three concepts were previously all called "tiers." Rename permanently:
 
 **Guardrail:** `instinct run` never reads from the warehouse. If the warehouse is ever enhanced with derived signals (cross-project pattern hits, warehouse-scale percentiles), those are consumed by reports and curator tools, not by the analysis pipeline. The local SQLite stays authoritative for every number on the front page.
 
-**Rationale:** uses infrastructure that already exists (Postgres on Mycroft, pgvector on Resolve) when the value is there, while preserving offline operation and physical corporate isolation. The design cost is one column on two tables, one reserved command, and one config flag.
+**Rationale:** uses infrastructure that already exists (Postgres on the home server, pgvector on Resolve) when the value is there, while preserving offline operation and physical corporate isolation. The design cost is one column on two tables, one reserved command, and one config flag.
 
 ---
 

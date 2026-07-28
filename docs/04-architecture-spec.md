@@ -589,10 +589,10 @@ This section exists so MVP implementation doesn't paint itself into corners. Eac
 
 Instinct runs on any developer workstation. For Gary's setup:
 
-- **Sherlock** (primary development) — first target for bringup and daily use on Baker Street and Resolve.
-- **Irene** (personal AI workstation) — runs the curator agent in R3+. No curator in MVP.
-- **Lestrade** (laptop) — same daily-use target as Sherlock.
-- **Mycroft** (server, 36TB ZFS) — candidate Postgres host when multi-project DB arrives in R2+; not in MVP.
+- **Primary workstation** — first target for bringup and daily use on Baker Street and Resolve.
+- **Inference node** (Apple Silicon) — runs the curator agent in R3+. No curator in MVP.
+- **Laptop** — same daily-use target as the primary workstation.
+- **Home server** (large ZFS pool) — candidate Postgres host when multi-project DB arrives in R2+; not in MVP.
 
 The MVP works identically on all of these with no special configuration.
 

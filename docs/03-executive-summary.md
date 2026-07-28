@@ -69,7 +69,7 @@ The compounding is the point. A single run is a linter. A system that learns wha
                                 ▼
                        ┌──────────────────┐
                        │     Curator      │  ◀──── Release 3
-                       │ (LLM-backed)     │       runs on Irene, MLX
+                       │ (LLM-backed)     │       runs on the inference node, MLX
                        └────────┬─────────┘
                                 │ proposes changes to
                                 ▼
@@ -102,7 +102,7 @@ Instinct performs zero outbound network calls by default. Remote APIs are opt-in
 
 Repos declare their scope explicitly (`personal | corporate | open-source`) in `.instinct/config.yaml`. Corporate-scoped repos are hard-isolated: their observations never leave the repo, they never participate in cross-project analysis, and they never contribute to personal pattern learning. Missing scope declaration is an error, not a default.
 
-This is a product requirement, not operational hygiene. JMA work and personal work share a machine; they don't share a knowledge base.
+This is a product requirement, not operational hygiene. Client work and personal work share a machine; they don't share a knowledge base.
 
 ## Measurable Success for MVP
 
@@ -154,9 +154,9 @@ Every number traces to a formula in the metric catalog. Every target has a ratio
 
 Several investments converge on this tool:
 
-- **Multi-project workload** (Baker Street .NET, Resolve TypeScript, BuildFlow TypeScript, JMA Azure work) is the substrate where cross-project pattern synthesis becomes possible in later releases.
+- **Multi-project workload** (a mix of .NET, TypeScript, and cloud client engagements) is the substrate where cross-project pattern synthesis becomes possible in later releases.
 - **Postgres + pgvector + Voyage stack** is already running on Resolve and is the right substrate when R2+ needs embedding search.
-- **Irene (Mac Mini M4 Pro, 64GB, MLX)** is set up for local LLM inference and is the natural curator host in R3+.
+- An **Apple Silicon inference node (M4 Pro, 64GB, MLX)** is set up for local LLM inference and is the natural curator host in R3+.
 - **Existing Actively Managed Knowledge Base pattern** from the inbox system maps directly onto observation/pattern-store separation. Same metabolism, different content.
 - **Claude Code skills and handoff workflow** is the distribution channel for R5 generation integration.
 

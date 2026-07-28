@@ -38,3 +38,9 @@ CLAUDE.local.md
 
 # Session-start hook backups
 .claude.bak-*/
+
+# Local AI session tooling — never published (skills live in savviety-skills)
+.claude/
+.claude.bak-*/
+.instinct/
+CLAUDE.md

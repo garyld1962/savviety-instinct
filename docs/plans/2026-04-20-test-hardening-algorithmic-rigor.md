@@ -130,7 +130,7 @@ to collect baseline stats:
 
 ```
 ImportError while importing test module
-  '/home/gary/repos/instinct/mutants/tests/integration/test_parse_graph_pipeline.py'
+  ''&lt;repo&gt;/mutants/tests/integration/lt;repo'&lt;repo&gt;/mutants/tests/integration/gt;/mutants/tests/integration/test_parse_graph_pipeline.py'
 E   ModuleNotFoundError: No module named 'savviety_instinct.core'
 ```
 

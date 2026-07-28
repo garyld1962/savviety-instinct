@@ -328,7 +328,7 @@ Changes to metric formulas MUST update the snapshot and be reviewed before merge
 
 These releases inform the MVP architecture (schema reserves columns; APIs are structured to accept new inputs) but are not in MVP scope.
 
-- **Release 2 — LLM adjudication.** Triage and Deep Read stages on flagged candidates. Comprehensibility axis added. Local LLM via MLX on Irene or Ollama.
+- **Release 2 — LLM adjudication.** Triage and Deep Read stages on flagged candidates. Comprehensibility axis added. Local LLM via MLX on an Apple Silicon node, or Ollama.
 - **Release 3 — Pattern mining.** Curator agent. Project-scope pattern library. Reports flag deviations from canonical patterns. Files canonical, DB derived (per D4).
 - **Release 4 — Assist levels.** Observe (always on) → Suggest → Patch-Assist → Apply ladder. Personal-scope and Global-scope patterns. Override tracking feedback loop.
 - **Release 5 — Generation integration.** MCP server; Claude Code pattern retrieval.
