@@ -94,8 +94,9 @@ def init_cmd() -> None:
 @app.command("run")
 def run_cmd(
     path: Path = typer.Argument(  # noqa: B008
-        ...,
-        help="File or directory to analyze. Must be a .py file or a dir with .py files.",
+        Path("."),
+        help="File or directory to analyze (default: current directory). "
+        "Must be a .py file or a dir with .py files.",
     ),
 ) -> None:
     """Analyze Python code at PATH and print metrics to stdout.

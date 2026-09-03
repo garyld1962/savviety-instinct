@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -83,3 +84,15 @@ def test_run_rows_are_deterministically_sorted(tmp_path, monkeypatch) -> None:
     rows1 = [line for line in result1.stdout.splitlines() if "\t" in line]
     rows2 = [line for line in result2.stdout.splitlines() if "\t" in line]
     assert rows1 == rows2
+
+
+def test_run_without_path_analyzes_current_directory(tmp_path, monkeypatch) -> None:
+    """README documents `uv run instinct run` with no argument (README.md:52)."""
+    _write_config(tmp_path / ".instinct")
+    shutil.copy(FIXTURES / "metric_fixtures.py", tmp_path / "metric_fixtures.py")
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(app, ["run"], catch_exceptions=False)
+    assert result.exit_code == 0
+    rows = [line for line in result.stdout.splitlines() if "\t" in line]
+    assert len(rows) == expected_row_count(n_functions=10, n_modules=1)
