@@ -1,7 +1,7 @@
 """Instinct CLI (Typer).
 
-Slice 1 surface:
-    instinct version   — print tool and metric versions
+Commands:
+    instinct version   — print tool version and every registered metric version
     instinct init      — scaffold .instinct/config.yaml and .gitignore entries
     instinct sync      — R2 reserved; prints "not available in this release"
     instinct curate    — R3 reserved
@@ -39,21 +39,17 @@ def _callback() -> None:
     """Instinct — measure what matters. Learn what your team does well. Apply it."""
 
 
-# Slice 1 has no registered metrics. Later slices append to this dict as
-# they register their metrics (metric_id -> metric_version).
-REGISTERED_METRIC_VERSIONS: dict[str, str] = {}
-
-
 @app.command("version")
 def version_cmd() -> None:
     """Print tool and metric versions."""
+    # Lazy import, as in run_cmd: analyze pulls in tree-sitter and the
+    # metric modules, which the other commands do not need.
+    from savviety_instinct.analyze import METRICS_REGISTRY
+
     typer.echo(f"instinct {__version__}")
-    if REGISTERED_METRIC_VERSIONS:
-        typer.echo("metrics:")
-        for metric_id, version in sorted(REGISTERED_METRIC_VERSIONS.items()):
-            typer.echo(f"  {metric_id}: {version}")
-    else:
-        typer.echo("metrics: (none registered)")
+    typer.echo("metrics:")
+    for metric in sorted(METRICS_REGISTRY, key=lambda m: m.id):
+        typer.echo(f"  {metric.id}: {metric.version}")
 
 
 GITIGNORE_ENTRIES: tuple[str, ...] = (
