@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from savviety_instinct.analyze.pipeline import run_pipeline
+from savviety_instinct.analyze.pipeline import _is_suppressed, run_pipeline
 from savviety_instinct.config.models import InstinctConfig
 from tests._helpers import expected_row_count
 
@@ -71,3 +71,27 @@ def test_pipeline_summary_is_mutable_view() -> None:
     assert summary.files_parsed == 0  # pre-drain
     list(results)  # drain
     assert summary.files_parsed == 1  # post-drain
+
+
+@pytest.mark.parametrize(
+    ("path", "pattern", "expected"),
+    [
+        # Relative, top-level: these are what `instinct run .` produces.
+        (Path(".venv/lib/site.py"), "**/.venv/**", True),
+        (Path("test_foo.py"), "**/test_*.py", True),
+        (Path("tests/test_foo.py"), "**/tests/**", True),
+        # Nested and absolute forms already matched before the fix and must still match.
+        (Path("pkg/.venv/x.py"), "**/.venv/**", True),
+        (Path("/abs/.venv/x.py"), "**/.venv/**", True),
+        # Ordinary source must not be suppressed.
+        (Path("src/pkg/mod.py"), "**/.venv/**", False),
+        (Path("src/pkg/mod.py"), "**/test_*.py", False),
+    ],
+)
+def test_is_suppressed_matches_leading_doublestar_at_root(
+    path: Path, pattern: str, expected: bool
+) -> None:
+    """fnmatch('**/.venv/**') needs a directory before '.venv'; a relative
+    top-level path has none, so the default suppress list was inert for
+    `instinct run .` (2026-09-03 review, blocker 3)."""
+    assert _is_suppressed(path, [pattern]) is expected

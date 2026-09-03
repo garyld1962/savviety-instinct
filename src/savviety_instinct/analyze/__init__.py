@@ -16,11 +16,12 @@ from savviety_instinct.analyze.metrics import (
 from savviety_instinct.analyze.persistence import run_pipeline_with_persistence
 from savviety_instinct.analyze.pipeline import PipelineSummary, run_pipeline
 from savviety_instinct.analyze.rules import CognitiveRules, load_cognitive_rules
+from savviety_instinct.core.types import Metric
 
 # Module-level registry. Ordered for deterministic output in CLI reports.
 # Control-flow family first (statement_count sets up size-family too), then
 # identifier_quality as a comprehensibility signal.
-METRICS_REGISTRY = (
+METRICS_REGISTRY: tuple[Metric, ...] = (
     # Function-level (Slice 3 + 4a)
     STATEMENT_COUNT_METRIC,
     CYCLOMATIC_METRIC,

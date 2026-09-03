@@ -22,7 +22,6 @@ The full D6 composition arrives in R2.
 
 from __future__ import annotations
 
-import fnmatch
 import hashlib
 import sys
 from collections.abc import Callable, Iterator
@@ -30,7 +29,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from savviety_instinct import __version__
-from savviety_instinct.analyze.pipeline import PipelineSummary
+from savviety_instinct.analyze.pipeline import PipelineSummary, _discover_files
 from savviety_instinct.config.models import InstinctConfig
 from savviety_instinct.core.types import (
     AnalysisContext,
@@ -55,18 +54,6 @@ from savviety_instinct.storage.run_meta import (
     compute_config_hash,
     derive_git_commit_branch,
 )
-
-
-def _discover_files(path: Path, suppress: list[str]) -> list[Path]:
-    """Same logic as analyze.pipeline._discover_files. Duplicated here
-    to avoid depending on a private helper across module boundaries."""
-    if path.is_file():
-        s = str(path)
-        if any(fnmatch.fnmatch(s, pat) for pat in suppress):
-            return []
-        return [path] if path.suffix == ".py" else []
-    candidates = sorted(path.rglob("*.py"))
-    return [p for p in candidates if not any(fnmatch.fnmatch(str(p), pat) for pat in suppress)]
 
 
 def _module_ast_hash(functions: tuple[FunctionDefNode, ...]) -> str:

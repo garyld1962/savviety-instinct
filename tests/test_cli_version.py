@@ -5,6 +5,7 @@ from __future__ import annotations
 from typer.testing import CliRunner
 
 from savviety_instinct import __version__
+from savviety_instinct.analyze import METRICS_REGISTRY
 from savviety_instinct.cli.app import app
 
 runner = CliRunner()
@@ -16,9 +17,9 @@ def test_version_prints_tool_version():
     assert __version__ in result.stdout
 
 
-def test_version_mentions_metrics_section():
-    result = runner.invoke(app, ["version"])
+def test_version_lists_every_registered_metric() -> None:
+    result = runner.invoke(app, ["version"], catch_exceptions=False)
     assert result.exit_code == 0
-    # In Slice 1 no metrics are registered; version should still list a
-    # metrics section so the output shape is stable as metrics land.
-    assert "metric" in result.stdout.lower()
+    assert "(none registered)" not in result.stdout
+    for metric in METRICS_REGISTRY:
+        assert f"  {metric.id}: {metric.version}" in result.stdout
