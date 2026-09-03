@@ -126,8 +126,18 @@ def _discover_files(path: Path, suppress: list[str]) -> list[Path]:
 
 
 def _is_suppressed(path: Path, patterns: list[str]) -> bool:
-    s = str(path)
-    return any(fnmatch.fnmatch(s, pat) for pat in patterns)
+    # fnmatch treats a leading "**/" as "at least one directory, then /".
+    # A relative top-level path such as ".venv/lib/x.py" has no directory
+    # before ".venv", so "**/.venv/**" never matched it and `instinct run .`
+    # walked the virtualenv. Also try the pattern with "**/" stripped so it
+    # matches from the root.
+    s = path.as_posix()
+    for pat in patterns:
+        if fnmatch.fnmatch(s, pat):
+            return True
+        if pat.startswith("**/") and fnmatch.fnmatch(s, pat[3:]):
+            return True
+    return False
 
 
 def _module_ast_hash(functions: tuple[FunctionDefNode, ...]) -> str:

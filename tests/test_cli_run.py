@@ -96,3 +96,22 @@ def test_run_without_path_analyzes_current_directory(tmp_path, monkeypatch) -> N
     assert result.exit_code == 0
     rows = [line for line in result.stdout.splitlines() if "\t" in line]
     assert len(rows) == expected_row_count(n_functions=10, n_modules=1)
+
+
+def test_run_dot_skips_venv_under_default_suppressions(tmp_path, monkeypatch) -> None:
+    """`instinct run .` on this repo printed 230k rows from .venv/ (2026-09-03 review)."""
+    cfg_dir = tmp_path / ".instinct"
+    cfg_dir.mkdir()
+    (cfg_dir / "config.yaml").write_text("scope: personal\n")  # default suppress list
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "pkg" / "mod.py").write_text("def real(x):\n    return x + 1\n")
+    (tmp_path / ".venv" / "lib").mkdir(parents=True)
+    (tmp_path / ".venv" / "lib" / "junk.py").write_text("def junk(y):\n    return y\n")
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(app, ["run", "."], catch_exceptions=False)
+    assert result.exit_code == 0
+    rows = [line for line in result.stdout.splitlines() if "\t" in line]
+    assert rows, "expected metric rows for pkg/mod.py"
+    assert all(".venv/" not in row for row in rows), rows
+    assert any("pkg/mod.py" in row for row in rows)
